@@ -50,25 +50,37 @@ export function incentiveForPurchase(planId: number | string, unit: string | nul
   return 0
 }
 
-export interface RateCardRow {
-  label: string
+export interface RateCardTier {
   duration: string
   amount: number
 }
 
-// Groups rules by (label, amount) so identical-payout tiers with different
-// underlying SKUs (e.g. Gold's legacy 6-month vs current 7-month) collapse
-// into a single display row instead of looking like two separate offers.
-export function getRateCardRows(): RateCardRow[] {
-  const merged = new Map<string, { label: string; durations: string[]; amount: number }>()
+export interface RateCardGroup {
+  label: string
+  tiers: RateCardTier[]
+}
+
+// One row per plan (not per rule) - each row lists all of that plan's
+// duration tiers together, e.g. "BSc 4th Year: 12mo Rs.500 / 18mo Rs.600 /
+// 24mo Rs.700" as one line, instead of 3 near-identical tiles. Tiers with
+// the same payout (e.g. Gold's legacy 6-month vs current 7-month SKU) merge
+// into a single tier rather than showing as two separate offers.
+export function getRateCardGroups(): RateCardGroup[] {
+  const byLabel = new Map<string, Map<number, string[]>>()
   for (const rule of INCENTIVES) {
-    const key = `${rule.label}__${rule.amount}`
     const duration = rule.months === '*' ? 'Any duration' : `${rule.months} month${rule.months === 1 ? '' : 's'}`
-    const entry = merged.get(key)
-    if (entry) entry.durations.push(duration)
-    else merged.set(key, { label: rule.label, durations: [duration], amount: rule.amount })
+    if (!byLabel.has(rule.label)) byLabel.set(rule.label, new Map())
+    const byAmount = byLabel.get(rule.label)!
+    if (!byAmount.has(rule.amount)) byAmount.set(rule.amount, [])
+    byAmount.get(rule.amount)!.push(duration)
   }
-  return [...merged.values()]
-    .map((entry) => ({ label: entry.label, duration: entry.durations.join(' / '), amount: entry.amount }))
-    .sort((a, b) => b.amount - a.amount)
+
+  return [...byLabel.entries()]
+    .map(([label, byAmount]) => ({
+      label,
+      tiers: [...byAmount.entries()]
+        .map(([amount, durations]) => ({ duration: durations.join(' / '), amount }))
+        .sort((a, b) => b.amount - a.amount),
+    }))
+    .sort((a, b) => Math.max(...b.tiers.map((t) => t.amount)) - Math.max(...a.tiers.map((t) => t.amount)))
 }
