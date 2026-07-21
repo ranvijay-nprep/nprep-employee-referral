@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Filter, Inbox, MailCheck, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Clock, Filter, Inbox, MailCheck, ShieldCheck, Ticket, Users } from 'lucide-react'
 import ReportView from '@/components/ReportView'
 import LogoutButton from '@/components/LogoutButton'
 import AddAdminForm from '@/components/AddAdminForm'
+import type { AdminOverviewStats } from '@/lib/db'
 import type { CouponRequest, Employee } from '@/lib/types'
 
 interface PendingRequestRow extends CouponRequest {
@@ -22,12 +23,14 @@ export default function AdminDashboard({
   adminName,
   currentAdminId,
   admins,
+  overview,
   pendingRequests,
   activeEmployees,
 }: {
   adminName: string
   currentAdminId: number
   admins: Employee[]
+  overview: AdminOverviewStats
   pendingRequests: PendingRequestRow[]
   activeEmployees: ActiveEmployee[]
 }) {
@@ -39,6 +42,37 @@ export default function AdminDashboard({
       <div className="page-header fade-in">
         <h1>Referral Admin — {adminName.split(' ')[0]}</h1>
         <LogoutButton />
+      </div>
+
+      <div className="kpi-grid fade-in">
+        <div className="kpi">
+          <div className="kpi-icon" style={{ background: '#eef1fb', color: 'var(--navy)' }}>
+            <Users size={17} />
+          </div>
+          <div className="value">{overview.totalEmployees}</div>
+          <div className="label">Registered Employees</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-icon" style={{ background: '#eef1fb', color: 'var(--navy)' }}>
+            <Ticket size={17} />
+          </div>
+          <div className="value">{overview.couponsRequested}</div>
+          <div className="label">Coupons Requested</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-icon" style={{ background: 'var(--success-bg)', color: 'var(--navy)' }}>
+            <CheckCircle2 size={17} />
+          </div>
+          <div className="value">{overview.couponsActive}</div>
+          <div className="label">Coupons Approved &amp; Live</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-icon" style={{ background: 'var(--warn-bg)', color: 'var(--navy)' }}>
+            <Clock size={17} />
+          </div>
+          <div className="value">{overview.couponsPending}</div>
+          <div className="label">Coupons Awaiting Activation</div>
+        </div>
       </div>
 
       <div className="card fade-in">

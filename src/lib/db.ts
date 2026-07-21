@@ -205,6 +205,22 @@ export function getPendingCouponRequests(): Array<CouponRequest & { employeeName
     .all() as Array<CouponRequest & { employeeName: string; employeeEmail: string }>
 }
 
+export interface AdminOverviewStats {
+  totalEmployees: number
+  couponsRequested: number
+  couponsActive: number
+  couponsPending: number
+}
+
+export function getAdminOverviewStats(): AdminOverviewStats {
+  const db = getDb()
+  const totalEmployees = (db.prepare('SELECT COUNT(*) AS c FROM employees').get() as { c: number }).c
+  const couponsRequested = (db.prepare('SELECT COUNT(*) AS c FROM coupon_requests').get() as { c: number }).c
+  const couponsActive = (db.prepare("SELECT COUNT(*) AS c FROM coupon_requests WHERE status = 'active'").get() as { c: number }).c
+  const couponsPending = (db.prepare("SELECT COUNT(*) AS c FROM coupon_requests WHERE status = 'pending'").get() as { c: number }).c
+  return { totalEmployees, couponsRequested, couponsActive, couponsPending }
+}
+
 export function activateCouponRequest(id: number): void {
   const now = new Date().toISOString()
   getDb()

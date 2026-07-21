@@ -1,5 +1,5 @@
 import { requireAdmin } from '@/lib/auth'
-import { getActiveEmployeeByCoupon, getPendingCouponRequests, listAdmins } from '@/lib/db'
+import { getActiveEmployeeByCoupon, getAdminOverviewStats, getPendingCouponRequests, listAdmins } from '@/lib/db'
 import AdminDashboard from '@/components/AdminDashboard'
 
 export default async function AdminPage() {
@@ -12,12 +12,14 @@ export default async function AdminPage() {
     code,
   }))
   const admins = listAdmins()
+  const overview = getAdminOverviewStats()
 
   return (
     <AdminDashboard
       adminName={session.employee.name}
       currentAdminId={session.employee.id}
       admins={admins}
+      overview={overview}
       pendingRequests={pendingRequests}
       activeEmployees={activeEmployees}
     />

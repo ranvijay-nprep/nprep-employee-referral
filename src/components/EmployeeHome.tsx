@@ -6,6 +6,7 @@ import CouponRequestForm from '@/components/CouponRequestForm'
 import CouponStepper from '@/components/CouponStepper'
 import ReportView from '@/components/ReportView'
 import LogoutButton from '@/components/LogoutButton'
+import IncentiveRateCard from '@/components/IncentiveRateCard'
 import type { CouponRequest, Employee } from '@/lib/types'
 
 export default function EmployeeHome({ employee, coupon }: { employee: Employee; coupon: CouponRequest | null }) {
@@ -45,6 +46,8 @@ export default function EmployeeHome({ employee, coupon }: { employee: Employee;
         <h1>Hi, {employee.name.split(' ')[0]} 👋</h1>
         <LogoutButton />
       </div>
+
+      <IncentiveRateCard />
 
       {!current ? (
         <div className="fade-in">
