@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Filter, Inbox, MailCheck } from 'lucide-react'
+import { CheckCircle2, Filter, Inbox, MailCheck, ShieldCheck } from 'lucide-react'
 import ReportView from '@/components/ReportView'
 import LogoutButton from '@/components/LogoutButton'
-import type { CouponRequest } from '@/lib/types'
+import AddAdminForm from '@/components/AddAdminForm'
+import type { CouponRequest, Employee } from '@/lib/types'
 
 interface PendingRequestRow extends CouponRequest {
   employeeName: string
@@ -19,14 +20,19 @@ interface ActiveEmployee {
 
 export default function AdminDashboard({
   adminName,
+  currentAdminId,
+  admins,
   pendingRequests,
   activeEmployees,
 }: {
   adminName: string
+  currentAdminId: number
+  admins: Employee[]
   pendingRequests: PendingRequestRow[]
   activeEmployees: ActiveEmployee[]
 }) {
   const [employeeFilter, setEmployeeFilter] = useState('')
+  const [adminList, setAdminList] = useState(admins)
 
   return (
     <main className="page">
@@ -78,6 +84,38 @@ export default function AdminDashboard({
             Nothing pending - all caught up.
           </div>
         )}
+      </div>
+
+      <div className="card fade-in-delay-1">
+        <div className="card-title-row">
+          <ShieldCheck size={20} />
+          <h2>Admins ({adminList.length})</h2>
+        </div>
+        <p>Anyone added here gets full admin access the moment they sign in with that @nprep.in account.</p>
+        <table className="referral-table" style={{ marginBottom: '1rem' }}>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody>
+            {adminList.map((admin) => (
+              <tr key={admin.id}>
+                <td>
+                  {admin.name}
+                  {admin.id === currentAdminId ? <span className="status-chip success" style={{ marginLeft: '0.5rem' }}>You</span> : null}
+                </td>
+                <td>{admin.email}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <AddAdminForm
+          onAdded={(employee) =>
+            setAdminList((prev) => (prev.some((a) => a.id === employee.id) ? prev.map((a) => (a.id === employee.id ? employee : a)) : [...prev, employee]))
+          }
+        />
       </div>
 
       <div className="card fade-in-delay-1">

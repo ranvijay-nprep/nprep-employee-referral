@@ -84,14 +84,45 @@ export function getEmployeeById(id: number): Employee | null {
 }
 
 // Creates the employee row on first Google sign-in, or returns the existing
-// one. Role is decided ONCE, at creation - see isBootstrapAdmin in domain.ts.
+// one. Role is decided ONCE, at creation - see isBootstrapAdmin in domain.ts,
+// or promoteToAdmin below for rows an admin pre-created by email. If the row
+// already exists with a placeholder name (see promoteToAdmin), refresh it
+// with the real name Google returns on their actual first login.
 export function findOrCreateEmployee(email: string, name: string, role: EmployeeRole): Employee {
   const existing = getEmployeeByEmail(email)
-  if (existing) return existing
+  if (existing) {
+    if (existing.name !== name) {
+      getDb().prepare('UPDATE employees SET name = ? WHERE id = ?').run(name, existing.id)
+      return getEmployeeById(existing.id)!
+    }
+    return existing
+  }
   const now = new Date().toISOString()
   const result = getDb()
     .prepare('INSERT INTO employees (email, name, role, created_at) VALUES (?, ?, ?, ?)')
     .run(email, name, role, now)
+  return getEmployeeById(Number(result.lastInsertRowid))!
+}
+
+export function listAdmins(): Employee[] {
+  return getDb().prepare("SELECT * FROM employees WHERE role = 'admin' ORDER BY name").all() as Employee[]
+}
+
+// Called when an existing admin adds a new admin by email. If that email has
+// already signed in as an employee, promotes their existing row. Otherwise
+// creates a placeholder row (name = email's local part) that becomes real the
+// moment they actually sign in - see findOrCreateEmployee above.
+export function promoteToAdmin(email: string): Employee {
+  const existing = getEmployeeByEmail(email)
+  if (existing) {
+    getDb().prepare("UPDATE employees SET role = 'admin' WHERE id = ?").run(existing.id)
+    return getEmployeeById(existing.id)!
+  }
+  const now = new Date().toISOString()
+  const placeholderName = email.split('@')[0]
+  const result = getDb()
+    .prepare("INSERT INTO employees (email, name, role, created_at) VALUES (?, ?, 'admin', ?)")
+    .run(email, placeholderName, now)
   return getEmployeeById(Number(result.lastInsertRowid))!
 }
 
