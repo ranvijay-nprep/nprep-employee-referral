@@ -3,13 +3,15 @@ import type { NextRequest } from 'next/server'
 import { exchangeCodeForIdentity } from '@/lib/googleAuth'
 import { isAllowedEmail, isBootstrapAdmin } from '@/lib/domain'
 import { createSession, findOrCreateEmployee } from '@/lib/db'
+import { getAppUrl } from '@/lib/appUrl'
 import { SESSION_COOKIE, STATE_COOKIE, sessionCookieOptions } from '@/lib/cookies'
 
 // Google redirects here after the user picks an account. This is the ONLY
 // place that creates an `employees` row - everywhere else treats "no
 // employees row" as "not signed in".
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url)
+  const origin = getAppUrl()
+  const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const state = searchParams.get('state')
   const expectedState = request.cookies.get(STATE_COOKIE)?.value
