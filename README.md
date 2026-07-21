@@ -64,8 +64,10 @@ only a UI hint, not a security boundary).
 
 1. Employee signs in, chooses a code, availability is checked against both
    this app's own `coupon_requests` table and NPrep's real `coupons` table.
-2. Submitting sends an email (via Resend) to `ADMIN_NOTIFY_EMAILS` with the
-   code, activation date, expiry date (+6 months), and usage limit (100).
+2. Submitting sends an email (via Resend) to **every current admin**
+   (fetched live from the `employees` table, not a static env var - a newly
+   added admin is included automatically) with the code, activation date,
+   expiry date (+6 months), and usage limit (100).
 3. **A human creates the actual coupon in NPrep's own admin system** using
    those exact details. This app cannot and does not do this step itself -
    see the read-only guarantee above.

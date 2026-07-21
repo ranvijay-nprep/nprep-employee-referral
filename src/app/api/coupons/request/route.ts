@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireSession } from '@/lib/auth'
-import { createCouponRequest, getCouponRequestByCode, getCouponRequestByEmployeeId, markCouponAdminNotified } from '@/lib/db'
+import { createCouponRequest, getCouponRequestByCode, getCouponRequestByEmployeeId, listAdmins, markCouponAdminNotified } from '@/lib/db'
 import { nprepCouponExists } from '@/lib/nprepDb'
 import { isValidCode, normalizeCode } from '@/lib/couponCode'
 import { sendAdminCouponRequestEmail } from '@/lib/email'
@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await sendAdminCouponRequestEmail(created, session.email)
+    const adminEmails = listAdmins().map((admin) => admin.email)
+    await sendAdminCouponRequestEmail(created, session.email, adminEmails)
     markCouponAdminNotified(created.id)
   } catch (emailError) {
     // The request itself succeeded and is visible on the admin fallback

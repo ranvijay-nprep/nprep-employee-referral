@@ -8,18 +8,13 @@ function getResend(): Resend {
   return resend
 }
 
-function adminRecipients(): string[] {
-  return (process.env.ADMIN_NOTIFY_EMAILS || '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean)
-}
-
 // Sent once, right after an employee submits a code request. Contains every
 // field an admin needs to manually create the coupon in NPrep's own system.
-export async function sendAdminCouponRequestEmail(request: CouponRequest, employeeEmail: string): Promise<void> {
-  const recipients = adminRecipients()
-  if (!recipients.length) throw new Error('ADMIN_NOTIFY_EMAILS is not configured')
+// `recipients` should be every current admin's email (see listAdmins in
+// db.ts) - fetched fresh at send-time so a newly-added admin is included
+// automatically, with no env var to keep in sync by hand.
+export async function sendAdminCouponRequestEmail(request: CouponRequest, employeeEmail: string, recipients: string[]): Promise<void> {
+  if (!recipients.length) throw new Error('No admin recipients to notify')
 
   await getResend().emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
