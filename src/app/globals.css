@@ -269,6 +269,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 1.75rem;
 }
 
@@ -278,6 +280,53 @@ body {
   color: var(--navy);
   margin: 0;
   letter-spacing: -0.01em;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Admin-only Admin/Referrer view switch (see ViewSwitch.tsx) */
+.view-switch {
+  display: inline-flex;
+  background: #eef1fb;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.view-switch-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--navy-soft);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.view-switch-opt svg {
+  flex-shrink: 0;
+}
+
+.view-switch-opt:hover:not(.active) {
+  color: var(--navy);
+  background: #e2e7fb;
+}
+
+.view-switch-opt.active {
+  background: #fff;
+  color: var(--navy);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  cursor: default;
 }
 
 .card {

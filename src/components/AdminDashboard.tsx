@@ -6,6 +6,7 @@ import ReportView from '@/components/ReportView'
 import LogoutButton from '@/components/LogoutButton'
 import AddAdminForm from '@/components/AddAdminForm'
 import NeedAttentionPanel from '@/components/NeedAttentionPanel'
+import ViewSwitch from '@/components/ViewSwitch'
 import type { AdminOverviewStats } from '@/lib/db'
 import type { CouponRequest, Employee } from '@/lib/types'
 
@@ -44,7 +45,10 @@ export default function AdminDashboard({
     <main className="page">
       <div className="page-header fade-in">
         <h1>Referral Admin — {adminName.split(' ')[0]}</h1>
-        <LogoutButton />
+        <div className="header-actions">
+          <ViewSwitch current="admin" />
+          <LogoutButton />
+        </div>
       </div>
 
       <div className="kpi-grid fade-in">

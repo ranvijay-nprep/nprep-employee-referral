@@ -11,8 +11,12 @@ export async function GET(request: NextRequest) {
   const fromDate = params.get('fromDate')
   const toDate = params.get('toDate')
   const employeeIdFilter = params.get('employeeId')
+  // An admin viewing their OWN referrer dashboard passes scope=self, so they
+  // get their personal referrals (their own coupon) instead of the org-wide
+  // admin report. Without it, an admin always gets the full admin report.
+  const scopeSelf = params.get('scope') === 'self'
 
-  if (session.employee.role === 'admin') {
+  if (session.employee.role === 'admin' && !scopeSelf) {
     const employeeByCoupon = getActiveEmployeeByCoupon()
     let entries = [...employeeByCoupon.entries()]
     if (employeeIdFilter) entries = entries.filter(([, value]) => String(value.employeeId) === employeeIdFilter)
