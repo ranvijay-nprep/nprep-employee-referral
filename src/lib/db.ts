@@ -60,7 +60,16 @@ function getDb(): Database.Database {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS employee_directory (
+        employee_no TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        department TEXT,
+        designation TEXT,
+        email TEXT
+      );
+
       CREATE INDEX IF NOT EXISTS coupon_requests_status_idx ON coupon_requests(status);
+      CREATE INDEX IF NOT EXISTS employee_directory_email_idx ON employee_directory(email);
     `)
 
     // Migration for databases created before employee_code existed: the
@@ -75,8 +84,52 @@ function getDb(): Database.Database {
       db.exec('ALTER TABLE employees ADD COLUMN employee_code TEXT')
     }
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS employees_employee_code_idx ON employees(employee_code)')
+
+    // Load the employee directory (the master list of valid Employee Nos) from
+    // a `directory.json` sitting next to the DB file, if present. Codes are
+    // never typed - they come from here, matched to a login by email. The file
+    // lives in the data volume (gitignored, not committed), so updating it +
+    // restarting re-syncs the table. Idempotent upsert; best-effort.
+    seedDirectoryIfPresent(db, dbPath)
   }
   return db
+}
+
+function seedDirectoryIfPresent(database: Database.Database, dbPath: string): void {
+  try {
+    const jsonPath = path.join(path.dirname(dbPath), 'directory.json')
+    if (!fs.existsSync(jsonPath)) return
+    const entries = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as Array<{
+      employeeNo: string | number
+      name: string
+      department?: string
+      designation?: string
+      email?: string
+    }>
+    if (!Array.isArray(entries) || !entries.length) return
+    const stmt = database.prepare(`
+      INSERT INTO employee_directory (employee_no, name, department, designation, email)
+      VALUES (@employee_no, @name, @department, @designation, @email)
+      ON CONFLICT(employee_no) DO UPDATE SET
+        name = excluded.name, department = excluded.department,
+        designation = excluded.designation, email = excluded.email
+    `)
+    const run = database.transaction((rows: typeof entries) => {
+      for (const row of rows) {
+        if (!row || row.employeeNo == null || row.employeeNo === '' || !row.name) continue
+        stmt.run({
+          employee_no: String(row.employeeNo).trim(),
+          name: String(row.name).trim(),
+          department: row.department ? String(row.department).trim() : null,
+          designation: row.designation ? String(row.designation).trim() : null,
+          email: row.email ? String(row.email).trim().toLowerCase() : null,
+        })
+      }
+    })
+    run(entries)
+  } catch (error) {
+    console.error('Directory seed from directory.json failed', error)
+  }
 }
 
 function hashToken(token: string): string {
@@ -145,17 +198,18 @@ export function getEmployeeByCode(employeeCode: string): Employee | null {
   return row || null
 }
 
-// Employees who have signed in but can't get a referral code yet: no
-// employee_code assigned AND no coupon request of their own. Powers the admin
-// "Need attention" panel. Employees who already have a coupon (e.g. from before
-// this model existed) are intentionally excluded - nothing to action for them.
+// People who have signed in but have no referral code yet: no employee_code
+// AND no coupon of their own. With auto-assign-on-login, this means their login
+// email wasn't found in the directory (e.g. their directory row lists a
+// personal email), so an admin must link them from the "Need attention" panel.
+// Anyone who already has a coupon is excluded - nothing to action.
 export function getEmployeesNeedingCode(): Employee[] {
   return getDb()
     .prepare(`
       SELECT e.*
       FROM employees e
       LEFT JOIN coupon_requests cr ON cr.employee_id = e.id
-      WHERE e.role = 'employee' AND e.employee_code IS NULL AND cr.id IS NULL
+      WHERE e.employee_code IS NULL AND cr.id IS NULL
       ORDER BY e.created_at ASC
     `)
     .all() as Employee[]
@@ -191,6 +245,50 @@ export function assignEmployeeCodeAndCreateCoupon(input: {
     employee: getEmployeeById(input.employeeId)!,
     request: database.prepare('SELECT * FROM coupon_requests WHERE id = ?').get(requestId) as CouponRequest,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Employee directory (master list of valid codes, from directory.json) */
+/* ------------------------------------------------------------------ */
+
+export interface DirectoryEntry {
+  employee_no: string
+  name: string
+  department: string | null
+  designation: string | null
+  email: string | null
+}
+
+// Look up a directory entry by login email (case-insensitive). This is how a
+// signed-in user's Employee No - and therefore their NPrep<no> code - is
+// determined automatically. Returns null if the email isn't in the directory.
+export function getDirectoryByEmail(email: string): DirectoryEntry | null {
+  const row = getDb()
+    .prepare('SELECT * FROM employee_directory WHERE email = ?')
+    .get(email.trim().toLowerCase()) as DirectoryEntry | undefined
+  return row || null
+}
+
+export function getDirectoryByNo(employeeNo: string): DirectoryEntry | null {
+  const row = getDb()
+    .prepare('SELECT * FROM employee_directory WHERE employee_no = ?')
+    .get(String(employeeNo).trim()) as DirectoryEntry | undefined
+  return row || null
+}
+
+// Directory entries not yet linked to any employee (no employee has this
+// employee_no as their code). Used to let an admin link an unmatched login
+// by picking the right person - never by typing a code.
+export function getUnassignedDirectory(): DirectoryEntry[] {
+  return getDb()
+    .prepare(`
+      SELECT d.*
+      FROM employee_directory d
+      LEFT JOIN employees e ON e.employee_code = d.employee_no
+      WHERE e.id IS NULL
+      ORDER BY CAST(d.employee_no AS INTEGER)
+    `)
+    .all() as DirectoryEntry[]
 }
 
 /* ------------------------------------------------------------------ */

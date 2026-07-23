@@ -1,5 +1,6 @@
 import { requireSession } from '@/lib/auth'
-import { getCouponRequestByEmployeeId } from '@/lib/db'
+import { getCouponRequestByEmployeeId, getDirectoryByEmail } from '@/lib/db'
+import { ensureReferralForLogin } from '@/lib/autoAssign'
 import EmployeeHome from '@/components/EmployeeHome'
 
 // The referrer dashboard - shown to everyone, admins included. Admins reach it
@@ -9,6 +10,11 @@ import EmployeeHome from '@/components/EmployeeHome'
 export default async function HomePage() {
   const session = await requireSession()
 
+  // Covers existing sessions (whose login predates this): try the directory
+  // auto-assign on view too. Best-effort and a no-op once they have a code.
+  await ensureReferralForLogin(session.employee)
+
   const coupon = getCouponRequestByEmployeeId(session.userId)
-  return <EmployeeHome employee={session.employee} coupon={coupon} />
+  const directory = getDirectoryByEmail(session.email)
+  return <EmployeeHome employee={session.employee} coupon={coupon} directoryCode={directory?.employee_no ?? null} />
 }
