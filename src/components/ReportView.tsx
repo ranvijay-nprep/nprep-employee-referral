@@ -22,7 +22,7 @@ interface ReportResponse {
   summary: ReferralSummary
 }
 
-export default function ReportView({ isAdmin, employeeId }: { isAdmin: boolean; employeeId?: string }) {
+export default function ReportView({ isAdmin, employeeId, personal }: { isAdmin: boolean; employeeId?: string; personal?: boolean }) {
   const [data, setData] = useState<ReportResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('all')
@@ -37,6 +37,7 @@ export default function ReportView({ isAdmin, employeeId }: { isAdmin: boolean; 
     try {
       const params = new URLSearchParams({ status })
       if (employeeId) params.set('employeeId', employeeId)
+      if (personal) params.set('scope', 'self')
       const response = await fetch(`/api/report?${params}`)
       if (!response.ok) throw new Error(await response.text())
       setData((await response.json()) as ReportResponse)

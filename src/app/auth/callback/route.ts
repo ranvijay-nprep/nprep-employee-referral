@@ -42,7 +42,11 @@ export async function GET(request: NextRequest) {
   const employee = findOrCreateEmployee(identity.email, identity.name, isBootstrapAdmin(identity.email) ? 'admin' : 'employee')
   const session = createSession(employee.id)
 
-  const response = NextResponse.redirect(`${origin}/`)
+  // Admins land on the admin dashboard by default; they can switch to their
+  // own referrer view from there. Everyone else goes straight to the referrer
+  // dashboard.
+  const destination = employee.role === 'admin' ? '/admin' : '/'
+  const response = NextResponse.redirect(`${origin}${destination}`)
   response.cookies.set(SESSION_COOKIE, session.token, sessionCookieOptions(session.expiresAt))
   response.cookies.delete(STATE_COOKIE)
   return response

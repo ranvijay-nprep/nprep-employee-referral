@@ -6,6 +6,8 @@ import CouponStepper from '@/components/CouponStepper'
 import ReportView from '@/components/ReportView'
 import LogoutButton from '@/components/LogoutButton'
 import IncentiveRateCard from '@/components/IncentiveRateCard'
+import ViewSwitch from '@/components/ViewSwitch'
+import SetMyCodeForm from '@/components/SetMyCodeForm'
 import type { CouponRequest, Employee } from '@/lib/types'
 
 // Who employees are told to ask when their employee code hasn't been set up.
@@ -47,30 +49,39 @@ export default function EmployeeHome({ employee, coupon }: { employee: Employee;
     <main className="page">
       <div className="page-header fade-in">
         <h1>Hi, {employee.name.split(' ')[0]} 👋</h1>
-        <LogoutButton />
+        <div className="header-actions">
+          {employee.role === 'admin' ? <ViewSwitch current="referrer" /> : null}
+          <LogoutButton />
+        </div>
       </div>
 
       <IncentiveRateCard />
 
       {!current ? (
-        <div className="card fade-in">
-          <div className="card-title-row">
-            <Info size={20} />
-            <h2>Your referral code isn&apos;t ready yet</h2>
+        employee.role === 'admin' && !employee.employee_code ? (
+          <div className="fade-in">
+            <SetMyCodeForm employeeId={employee.id} />
           </div>
-          {!employee.employee_code ? (
-            <p>
-              Your employee code hasn&apos;t been set up yet. Please request <b>{CODE_APPROVER}</b> to add your employee
-              code. Once it&apos;s added, your referral code (<b>NPrep</b> + your code) is generated automatically and
-              you&apos;ll see it here.
-            </p>
-          ) : (
-            <p>
-              Your employee code is set up — your referral code is being prepared. Check back shortly, or reach out to{' '}
-              <b>{CODE_APPROVER}</b> if it doesn&apos;t appear.
-            </p>
-          )}
-        </div>
+        ) : (
+          <div className="card fade-in">
+            <div className="card-title-row">
+              <Info size={20} />
+              <h2>Your referral code isn&apos;t ready yet</h2>
+            </div>
+            {!employee.employee_code ? (
+              <p>
+                Your employee code hasn&apos;t been set up yet. Please request <b>{CODE_APPROVER}</b> to add your
+                employee code. Once it&apos;s added, your referral code (<b>NPrep</b> + your code) is generated
+                automatically and you&apos;ll see it here.
+              </p>
+            ) : (
+              <p>
+                Your employee code is set up — your referral code is being prepared. Check back shortly, or reach out to{' '}
+                <b>{CODE_APPROVER}</b> if it doesn&apos;t appear.
+              </p>
+            )}
+          </div>
+        )
       ) : null}
 
       {current && current.status === 'pending' ? (
@@ -114,7 +125,7 @@ export default function EmployeeHome({ employee, coupon }: { employee: Employee;
             </p>
           </div>
           <div className="fade-in-delay-1">
-            <ReportView isAdmin={false} />
+            <ReportView isAdmin={false} personal />
           </div>
         </>
       ) : null}
