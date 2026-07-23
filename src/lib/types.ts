@@ -6,6 +6,11 @@ export interface Employee {
   email: string
   name: string
   role: EmployeeRole
+  // The employee's internal NPrep code, assigned by an admin. Their referral
+  // coupon is derived from it as `NPrep<employee_code>`. Null until an admin
+  // sets it - while null, the employee is shown a "ask an admin to add your
+  // code" message and appears in the admin "Need attention" panel.
+  employee_code: string | null
   created_at: string
 }
 

@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, Filter, Inbox, MailCheck, ShieldCheck, Ticket, Use
 import ReportView from '@/components/ReportView'
 import LogoutButton from '@/components/LogoutButton'
 import AddAdminForm from '@/components/AddAdminForm'
+import NeedAttentionPanel from '@/components/NeedAttentionPanel'
 import type { AdminOverviewStats } from '@/lib/db'
 import type { CouponRequest, Employee } from '@/lib/types'
 
@@ -24,6 +25,7 @@ export default function AdminDashboard({
   currentAdminId,
   admins,
   overview,
+  employeesNeedingCode,
   pendingRequests,
   activeEmployees,
 }: {
@@ -31,6 +33,7 @@ export default function AdminDashboard({
   currentAdminId: number
   admins: Employee[]
   overview: AdminOverviewStats
+  employeesNeedingCode: Employee[]
   pendingRequests: PendingRequestRow[]
   activeEmployees: ActiveEmployee[]
 }) {
@@ -74,6 +77,8 @@ export default function AdminDashboard({
           <div className="label">Coupons Awaiting Activation</div>
         </div>
       </div>
+
+      <NeedAttentionPanel employees={employeesNeedingCode} />
 
       <div className="card fade-in">
         <div className="card-title-row">

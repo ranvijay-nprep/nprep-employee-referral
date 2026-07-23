@@ -25,6 +25,7 @@ function getDb(): Database.Database {
         email TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'employee' CHECK (role IN ('employee', 'admin')),
+        employee_code TEXT,
         created_at TEXT NOT NULL
       );
 
@@ -61,6 +62,19 @@ function getDb(): Database.Database {
 
       CREATE INDEX IF NOT EXISTS coupon_requests_status_idx ON coupon_requests(status);
     `)
+
+    // Migration for databases created before employee_code existed: the
+    // CREATE TABLE above only adds the column to a brand-new DB, so an existing
+    // production DB needs an explicit ALTER. SQLite can't add a UNIQUE column
+    // via ALTER TABLE, so uniqueness is enforced by a separate unique index
+    // (NULLs are treated as distinct, so many employees can share "no code").
+    const hasEmployeeCode = (db.prepare('PRAGMA table_info(employees)').all() as Array<{ name: string }>).some(
+      (column) => column.name === 'employee_code',
+    )
+    if (!hasEmployeeCode) {
+      db.exec('ALTER TABLE employees ADD COLUMN employee_code TEXT')
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS employees_employee_code_idx ON employees(employee_code)')
   }
   return db
 }
@@ -124,6 +138,59 @@ export function promoteToAdmin(email: string): Employee {
     .prepare("INSERT INTO employees (email, name, role, created_at) VALUES (?, ?, 'admin', ?)")
     .run(email, placeholderName, now)
   return getEmployeeById(Number(result.lastInsertRowid))!
+}
+
+export function getEmployeeByCode(employeeCode: string): Employee | null {
+  const row = getDb().prepare('SELECT * FROM employees WHERE employee_code = ?').get(employeeCode) as Employee | undefined
+  return row || null
+}
+
+// Employees who have signed in but can't get a referral code yet: no
+// employee_code assigned AND no coupon request of their own. Powers the admin
+// "Need attention" panel. Employees who already have a coupon (e.g. from before
+// this model existed) are intentionally excluded - nothing to action for them.
+export function getEmployeesNeedingCode(): Employee[] {
+  return getDb()
+    .prepare(`
+      SELECT e.*
+      FROM employees e
+      LEFT JOIN coupon_requests cr ON cr.employee_id = e.id
+      WHERE e.role = 'employee' AND e.employee_code IS NULL AND cr.id IS NULL
+      ORDER BY e.created_at ASC
+    `)
+    .all() as Employee[]
+}
+
+// Admin approval action: assign the employee's code and create their derived
+// `NPrep<code>` coupon request in ONE transaction, so we never end up with a
+// code set but no coupon (or vice versa) if the second write hits a unique
+// constraint. A duplicate employee_code or coupon code makes the whole thing
+// throw and roll back - callers should pre-check for friendlier errors.
+export function assignEmployeeCodeAndCreateCoupon(input: {
+  employeeId: number
+  employeeCode: string
+  couponCode: string
+  usageLimit: number
+  activationDate: string
+  expiryDate: string
+}): { employee: Employee; request: CouponRequest } {
+  const database = getDb()
+  const now = new Date().toISOString()
+  const run = database.transaction(() => {
+    database.prepare('UPDATE employees SET employee_code = ? WHERE id = ?').run(input.employeeCode, input.employeeId)
+    const result = database
+      .prepare(`
+        INSERT INTO coupon_requests (employee_id, code, usage_limit, activation_date, expiry_date, requested_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .run(input.employeeId, input.couponCode, input.usageLimit, input.activationDate, input.expiryDate, now)
+    return Number(result.lastInsertRowid)
+  })
+  const requestId = run()
+  return {
+    employee: getEmployeeById(input.employeeId)!,
+    request: database.prepare('SELECT * FROM coupon_requests WHERE id = ?').get(requestId) as CouponRequest,
+  }
 }
 
 /* ------------------------------------------------------------------ */
