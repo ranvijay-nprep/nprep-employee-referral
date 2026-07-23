@@ -1,9 +1,12 @@
 import { Check } from 'lucide-react'
 import type { CouponStatus } from '@/lib/types'
 
+// Codes are assigned automatically from the employee directory - nobody
+// approves the person. The only wait is the coupon itself going live in NPrep,
+// so the labels describe that, not an approval.
 const STEPS = [
-  { key: 'requested', label: 'Code requested' },
-  { key: 'pending', label: 'Admin creating it in NPrep' },
+  { key: 'requested', label: 'Code assigned' },
+  { key: 'pending', label: 'Activating in NPrep' },
   { key: 'active', label: 'Live & shareable' },
 ] as const
 
