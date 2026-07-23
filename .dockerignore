@@ -1,0 +1,15 @@
+# Keep secrets and host-side state out of the build context. .env in
+# particular must never be baked into an image layer - it is supplied at
+# runtime via compose's `env_file` instead.
+.env
+.env.*
+!.env.example
+
+node_modules
+.next
+out
+data
+.git
+.gitignore
+*.log
+tsconfig.tsbuildinfo

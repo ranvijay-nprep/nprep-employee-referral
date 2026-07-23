@@ -1,0 +1,67 @@
+# Production compose file for the GCP VM (employee.nprep.in).
+#
+# Layout mirrors the nprep-notes VM:
+#   app    — Next.js + the custom server.ts (in-process node-cron lives here)
+#   caddy  — TLS termination + reverse proxy, automatic Let's Encrypt certs
+#
+# ./data is bind-mounted to /data and holds referral.sqlite. It is owned by
+# UID 1000 (the `node` user inside the app container). Nothing else on this
+# box is stateful - the whole VM can be rebuilt as long as ./data survives.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN: ${NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN:-nprep.in}
+    image: nprep-employee-referral:latest
+    container_name: referral_app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+    volumes:
+      # SQLite DB. SQLITE_DB_PATH in .env must point inside this mount.
+      - ./data:/data
+    expose:
+      - "3000"
+    networks:
+      - referral
+    healthcheck:
+      # /login is public (no auth redirect), so a 200 here means Next.js is
+      # actually serving, not just that the port is open.
+      test: ["CMD", "curl", "-fs", "http://localhost:3000/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: referral_caddy
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # 80 = HTTP→HTTPS redirect + ACME http-01 challenge
+      # 443 = the actual app
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persists Let's Encrypt certs + ACME account across rebuilds so we
+      # don't re-issue (and risk rate-limiting) on every deploy.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - referral
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  referral:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,19 @@
+# Global options
+{
+	# Used by Let's Encrypt to contact us about cert renewal issues.
+	email {$ADMIN_EMAIL}
+}
+
+# Main vhost. DOMAIN comes from .env (employee.nprep.in).
+#
+# Deliberately no HTTP Basic Auth here, unlike the nprep-notes Caddyfile:
+# access control for this app is Google OAuth restricted to the nprep.in
+# domain, enforced in src/app/auth/callback/route.ts. Adding basic auth on
+# top would break the OAuth redirect back from Google.
+{$DOMAIN} {
+	reverse_proxy app:3000
+
+	# Per-request access log to container stdout, read via
+	# `docker compose logs caddy`.
+	log
+}
