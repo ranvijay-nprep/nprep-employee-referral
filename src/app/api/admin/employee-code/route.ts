@@ -5,34 +5,42 @@ import {
   assignEmployeeCodeAndCreateCoupon,
   getCouponRequestByCode,
   getCouponRequestByEmployeeId,
+  getDirectoryByNo,
   getEmployeeByCode,
   getEmployeeById,
   listAdmins,
   markCouponAdminNotified,
 } from '@/lib/db'
 import { nprepCouponExists } from '@/lib/nprepDb'
-import { buildEmployeeCouponCode, isValidCode, normalizeEmployeeCode } from '@/lib/couponCode'
+import { buildEmployeeCouponCode } from '@/lib/couponCode'
 import { sendAdminCouponRequestEmail } from '@/lib/email'
 
 const USAGE_LIMIT = 100
 const EXPIRY_MONTHS = 6
 
-// Admin action from the "Need attention" panel: set an employee's internal
-// code and, in the same transaction, create their derived `NPrep<code>` coupon
-// request. From there it flows through the exact same pipeline as before - an
-// admin creates the real coupon in NPrep, and the cron flips it to active.
+// Admin action from the "Need attention" panel: link a signed-in person whose
+// email wasn't found in the directory to their actual directory entry.
+//
+// The code is NEVER free text - `employeeNo` must be an existing Employee No
+// from the employee directory. Anything else is rejected.
 export async function POST(request: NextRequest) {
   await requireAdmin()
 
-  const body = (await request.json().catch(() => ({}))) as { employeeId?: number; employeeCode?: string }
+  const body = (await request.json().catch(() => ({}))) as { employeeId?: number; employeeNo?: string | number }
   const employeeId = Number(body.employeeId)
-  const employeeCode = normalizeEmployeeCode(String(body.employeeCode || ''))
+  const employeeNo = String(body.employeeNo ?? '').trim()
 
   if (!employeeId || !Number.isInteger(employeeId)) {
     return NextResponse.json({ error: 'Missing employee.' }, { status: 400 })
   }
-  if (!employeeCode) {
-    return NextResponse.json({ error: 'Enter an employee code (letters/numbers).' }, { status: 400 })
+  if (!employeeNo) {
+    return NextResponse.json({ error: 'Pick an employee from the directory.' }, { status: 400 })
+  }
+
+  // The code must come from the directory - no custom codes.
+  const entry = getDirectoryByNo(employeeNo)
+  if (!entry) {
+    return NextResponse.json({ error: `"${employeeNo}" is not in the employee directory.` }, { status: 400 })
   }
 
   const employee = getEmployeeById(employeeId)
@@ -40,24 +48,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Employee not found.' }, { status: 404 })
   }
   if (employee.employee_code) {
-    return NextResponse.json({ error: 'This employee already has a code.' }, { status: 409 })
+    return NextResponse.json({ error: 'This person already has a code.' }, { status: 409 })
   }
   if (getCouponRequestByEmployeeId(employeeId)) {
-    return NextResponse.json({ error: 'This employee already has a referral code.' }, { status: 409 })
+    return NextResponse.json({ error: 'This person already has a referral code.' }, { status: 409 })
   }
 
-  const existingWithCode = getEmployeeByCode(employeeCode)
+  const existingWithCode = getEmployeeByCode(entry.employee_no)
   if (existingWithCode && existingWithCode.id !== employeeId) {
-    return NextResponse.json({ error: `Code "${employeeCode}" is already used by ${existingWithCode.email}.` }, { status: 409 })
+    return NextResponse.json(
+      { error: `Employee No ${entry.employee_no} is already linked to ${existingWithCode.email}.` },
+      { status: 409 },
+    )
   }
 
-  const couponCode = buildEmployeeCouponCode(employeeCode)
-  if (!isValidCode(couponCode)) {
-    return NextResponse.json({ error: 'That employee code is too long.' }, { status: 400 })
-  }
-
+  const couponCode = buildEmployeeCouponCode(entry.employee_no)
   if (getCouponRequestByCode(couponCode) || (await nprepCouponExists(couponCode))) {
-    return NextResponse.json({ error: `Coupon "${couponCode}" already exists. Pick a different employee code.` }, { status: 409 })
+    return NextResponse.json({ error: `Coupon "${couponCode}" already exists.` }, { status: 409 })
   }
 
   const activationDate = new Date()
@@ -68,16 +75,15 @@ export async function POST(request: NextRequest) {
   try {
     result = assignEmployeeCodeAndCreateCoupon({
       employeeId,
-      employeeCode,
+      employeeCode: entry.employee_no,
       couponCode,
       usageLimit: USAGE_LIMIT,
       activationDate: isoDate(activationDate),
       expiryDate: isoDate(expiryDate),
     })
   } catch {
-    // Unique-constraint race: the employee code or coupon code was taken
-    // between the checks above and the transaction.
-    return NextResponse.json({ error: 'That code was just taken - please try another.' }, { status: 409 })
+    // Unique-constraint race between the checks above and the transaction.
+    return NextResponse.json({ error: 'That employee was just linked - please refresh.' }, { status: 409 })
   }
 
   try {
@@ -85,8 +91,7 @@ export async function POST(request: NextRequest) {
     await sendAdminCouponRequestEmail(result.request, employee.email, adminEmails)
     markCouponAdminNotified(result.request.id)
   } catch (emailError) {
-    // The coupon request already exists and is visible on the pending
-    // dashboard - a failed notification email shouldn't fail the approval.
+    // Already visible on the pending dashboard - don't fail the link.
     console.error('Failed to send admin coupon-request email', emailError)
   }
 

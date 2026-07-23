@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { exchangeCodeForIdentity } from '@/lib/googleAuth'
 import { isAllowedEmail, isBootstrapAdmin } from '@/lib/domain'
 import { createSession, findOrCreateEmployee } from '@/lib/db'
+import { ensureReferralForLogin } from '@/lib/autoAssign'
 import { getAppUrl } from '@/lib/appUrl'
 import { SESSION_COOKIE, STATE_COOKIE, sessionCookieOptions } from '@/lib/cookies'
 
@@ -40,6 +41,9 @@ export async function GET(request: NextRequest) {
   }
 
   const employee = findOrCreateEmployee(identity.email, identity.name, isBootstrapAdmin(identity.email) ? 'admin' : 'employee')
+  // Automatic-on-login: match this email to the directory and create their
+  // NPrep<EmployeeNo> code if we can. Best-effort - never blocks sign-in.
+  await ensureReferralForLogin(employee)
   const session = createSession(employee.id)
 
   // Admins land on the admin dashboard by default; they can switch to their

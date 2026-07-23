@@ -7,7 +7,7 @@ import LogoutButton from '@/components/LogoutButton'
 import AddAdminForm from '@/components/AddAdminForm'
 import NeedAttentionPanel from '@/components/NeedAttentionPanel'
 import ViewSwitch from '@/components/ViewSwitch'
-import type { AdminOverviewStats } from '@/lib/db'
+import type { AdminOverviewStats, DirectoryEntry } from '@/lib/db'
 import type { CouponRequest, Employee } from '@/lib/types'
 
 interface PendingRequestRow extends CouponRequest {
@@ -27,6 +27,7 @@ export default function AdminDashboard({
   admins,
   overview,
   employeesNeedingCode,
+  directoryOptions,
   pendingRequests,
   activeEmployees,
 }: {
@@ -35,6 +36,7 @@ export default function AdminDashboard({
   admins: Employee[]
   overview: AdminOverviewStats
   employeesNeedingCode: Employee[]
+  directoryOptions: DirectoryEntry[]
   pendingRequests: PendingRequestRow[]
   activeEmployees: ActiveEmployee[]
 }) {
@@ -82,7 +84,7 @@ export default function AdminDashboard({
         </div>
       </div>
 
-      <NeedAttentionPanel employees={employeesNeedingCode} />
+      <NeedAttentionPanel employees={employeesNeedingCode} directoryOptions={directoryOptions} />
 
       <div className="card fade-in">
         <div className="card-title-row">
