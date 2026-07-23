@@ -1,16 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Copy, Share2, XCircle } from 'lucide-react'
-import CouponRequestForm from '@/components/CouponRequestForm'
+import { Check, Copy, Info, Share2, XCircle } from 'lucide-react'
 import CouponStepper from '@/components/CouponStepper'
 import ReportView from '@/components/ReportView'
 import LogoutButton from '@/components/LogoutButton'
 import IncentiveRateCard from '@/components/IncentiveRateCard'
 import type { CouponRequest, Employee } from '@/lib/types'
 
+// Who employees are told to ask when their employee code hasn't been set up.
+// Change here if a different admin owns onboarding.
+const CODE_APPROVER = 'Utkarsh sir'
+
 export default function EmployeeHome({ employee, coupon }: { employee: Employee; coupon: CouponRequest | null }) {
-  const [current, setCurrent] = useState(coupon)
+  const current = coupon
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   const copyShareMessage = async (code: string) => {
@@ -50,8 +53,23 @@ export default function EmployeeHome({ employee, coupon }: { employee: Employee;
       <IncentiveRateCard />
 
       {!current ? (
-        <div className="fade-in">
-          <CouponRequestForm onCreated={setCurrent} />
+        <div className="card fade-in">
+          <div className="card-title-row">
+            <Info size={20} />
+            <h2>Your referral code isn&apos;t ready yet</h2>
+          </div>
+          {!employee.employee_code ? (
+            <p>
+              Your employee code hasn&apos;t been set up yet. Please request <b>{CODE_APPROVER}</b> to add your employee
+              code. Once it&apos;s added, your referral code (<b>NPrep</b> + your code) is generated automatically and
+              you&apos;ll see it here.
+            </p>
+          ) : (
+            <p>
+              Your employee code is set up — your referral code is being prepared. Check back shortly, or reach out to{' '}
+              <b>{CODE_APPROVER}</b> if it doesn&apos;t appear.
+            </p>
+          )}
         </div>
       ) : null}
 

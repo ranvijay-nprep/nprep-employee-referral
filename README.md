@@ -1,9 +1,11 @@
 # NPrep Employee Referral Portal
 
-Internal tool: NPrep employees sign in with their company Google account,
-create their own referral coupon code, and share it. Purchases made with that
-code are attributed back to them for a sales incentive - separate from,
-and much simpler than, the external navigator-ts portal.
+Internal tool: NPrep employees sign in with their company Google account and
+get a referral coupon code to share. Codes are **not** employee-chosen - each
+is derived as `NPrep<employee_code>` from an internal code an admin assigns.
+Purchases made with that code are attributed back to the employee for a sales
+incentive - separate from, and much simpler than, the external navigator-ts
+portal.
 
 Stack: **Next.js (App Router) + SQLite (better-sqlite3) + a hand-rolled Google
 OAuth login + Resend**, deployed on **Railway** (a persistent container, not
@@ -62,12 +64,16 @@ only a UI hint, not a security boundary).
 
 ## How a coupon actually goes live (there is a manual step, by design)
 
-1. Employee signs in, chooses a code, availability is checked against both
-   this app's own `coupon_requests` table and NPrep's real `coupons` table.
-2. Submitting sends an email (via Resend) to **every current admin**
-   (fetched live from the `employees` table, not a static env var - a newly
-   added admin is included automatically) with the code, activation date,
-   expiry date (+6 months), and usage limit (100).
+1. Employee signs in. If no employee code has been assigned to them yet, they
+   see a "ask an admin to add your employee code" message and show up in the
+   admin **Need attention** panel (`/admin`). Employees do not pick codes.
+2. An admin opens the **Need attention** panel, enters the employee's internal
+   code, and approves. This derives the coupon as `NPrep<employee_code>`,
+   checks it against this app's own `coupon_requests` table and NPrep's real
+   `coupons` table, and - in one transaction - stores the employee code and
+   creates the coupon request. It then emails **every current admin** (fetched
+   live from the `employees` table, not a static env var) with the code,
+   activation date, expiry date (+6 months), and usage limit (100).
 3. **A human creates the actual coupon in NPrep's own admin system** using
    those exact details. This app cannot and does not do this step itself -
    see the read-only guarantee above.

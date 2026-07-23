@@ -1,10 +1,17 @@
 import { requireAdmin } from '@/lib/auth'
-import { getActiveEmployeeByCoupon, getAdminOverviewStats, getPendingCouponRequests, listAdmins } from '@/lib/db'
+import {
+  getActiveEmployeeByCoupon,
+  getAdminOverviewStats,
+  getEmployeesNeedingCode,
+  getPendingCouponRequests,
+  listAdmins,
+} from '@/lib/db'
 import AdminDashboard from '@/components/AdminDashboard'
 
 export default async function AdminPage() {
   const session = await requireAdmin()
 
+  const employeesNeedingCode = getEmployeesNeedingCode()
   const pendingRequests = getPendingCouponRequests()
   const activeEmployees = [...getActiveEmployeeByCoupon().entries()].map(([code, employee]) => ({
     employeeId: employee.employeeId,
@@ -20,6 +27,7 @@ export default async function AdminPage() {
       currentAdminId={session.employee.id}
       admins={admins}
       overview={overview}
+      employeesNeedingCode={employeesNeedingCode}
       pendingRequests={pendingRequests}
       activeEmployees={activeEmployees}
     />
