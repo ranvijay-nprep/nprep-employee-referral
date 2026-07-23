@@ -10,7 +10,14 @@ export async function GET(request: NextRequest) {
   const status = (params.get('status') as 'all' | 'successful' | 'failed' | 'pending') || 'all'
   const fromDate = params.get('fromDate')
   const toDate = params.get('toDate')
-  const employeeIdFilter = params.get('employeeId')
+  // One or more employees to scope to, comma-separated. The admin dashboard
+  // sends a whole department's worth of ids when filtering by department.
+  const employeeIdFilter = new Set(
+    (params.get('employeeIds') || params.get('employeeId') || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )
   // An admin viewing their OWN referrer dashboard passes scope=self, so they
   // get their personal referrals (their own coupon) instead of the org-wide
   // admin report. Without it, an admin always gets the full admin report.
@@ -19,7 +26,7 @@ export async function GET(request: NextRequest) {
   if (session.employee.role === 'admin' && !scopeSelf) {
     const employeeByCoupon = getActiveEmployeeByCoupon()
     let entries = [...employeeByCoupon.entries()]
-    if (employeeIdFilter) entries = entries.filter(([, value]) => String(value.employeeId) === employeeIdFilter)
+    if (employeeIdFilter.size) entries = entries.filter(([, value]) => employeeIdFilter.has(String(value.employeeId)))
     const couponCodes = entries.map(([code]) => code)
 
     if (!couponCodes.length) {

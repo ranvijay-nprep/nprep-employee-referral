@@ -2,7 +2,18 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import type { CouponRequest, CouponStatus, Employee, EmployeeRole, Payout } from '@/lib/types'
+import { MESSAGE_TEMPLATES } from '@/lib/messages'
+import { normalizePhone } from '@/lib/phone'
+import type {
+  CouponRequest,
+  CouponStatus,
+  Employee,
+  EmployeeRole,
+  EmployeeWithProfile,
+  MessageTemplate,
+  Payout,
+  ReferralShare,
+} from '@/lib/types'
 
 // This app's OWN bookkeeping database - employees, coupon requests, sessions,
 // payouts. Completely separate from NPrep's production MySQL (src/lib/nprepDb.ts),
@@ -68,8 +79,36 @@ function getDb(): Database.Database {
         email TEXT
       );
 
+      -- Who an employee actually sent their coupon to. A coupon is a broadcast
+      -- code, so nothing else in the system knows this - the employee records
+      -- it when they share, and a purchase is matched back by phone number.
+      CREATE TABLE IF NOT EXISTS referral_shares (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL REFERENCES employees(id),
+        coupon_code TEXT NOT NULL,
+        referee_name TEXT NOT NULL,
+        referee_phone TEXT NOT NULL,
+        channel TEXT NOT NULL DEFAULT 'whatsapp',
+        note TEXT,
+        shared_at TEXT NOT NULL,
+        last_reminded_at TEXT,
+        UNIQUE (employee_id, referee_phone)
+      );
+
+      -- Admin-editable copy for the messages employees send out. Seeded from
+      -- MESSAGE_TEMPLATES (src/lib/messages.ts) on first run.
+      CREATE TABLE IF NOT EXISTS message_templates (
+        key TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        updated_by INTEGER REFERENCES employees(id)
+      );
+
       CREATE INDEX IF NOT EXISTS coupon_requests_status_idx ON coupon_requests(status);
       CREATE INDEX IF NOT EXISTS employee_directory_email_idx ON employee_directory(email);
+      CREATE INDEX IF NOT EXISTS referral_shares_employee_idx ON referral_shares(employee_id);
     `)
 
     // Migration for databases created before employee_code existed: the
@@ -91,8 +130,28 @@ function getDb(): Database.Database {
     // lives in the data volume (gitignored, not committed), so updating it +
     // restarting re-syncs the table. Idempotent upsert; best-effort.
     seedDirectoryIfPresent(db, dbPath)
+    seedMessageTemplates(db)
   }
   return db
+}
+
+// Inserts any built-in template that isn't in the table yet, and keeps the
+// title/description (developer-owned labels) in sync. The BODY is only ever
+// written on first insert - once an admin has edited the copy, that edit wins
+// and a later change to the default must not silently revert it.
+function seedMessageTemplates(database: Database.Database): void {
+  const now = new Date().toISOString()
+  const stmt = database.prepare(`
+    INSERT INTO message_templates (key, title, description, body, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET title = excluded.title, description = excluded.description
+  `)
+  const run = database.transaction(() => {
+    for (const template of MESSAGE_TEMPLATES) {
+      stmt.run(template.key, template.title, template.description, template.body, now)
+    }
+  })
+  run()
 }
 
 function seedDirectoryIfPresent(database: Database.Database, dbPath: string): void {
@@ -175,10 +234,57 @@ export function listAdmins(): Employee[] {
   return getDb().prepare("SELECT * FROM employees WHERE role = 'admin' ORDER BY name").all() as Employee[]
 }
 
+// Joins `employees` to its `employee_directory` entry so every screen can show
+// department/designation without storing (and having to re-sync) them on the
+// employee row. Two mutually exclusive match paths: by the assigned code, or -
+// while someone has no code yet - by login email. GROUP BY guards against a
+// directory that ever ends up with two rows for one email.
+const EMPLOYEE_PROFILE_SELECT = `
+  SELECT e.*, d.name AS directory_name, d.department AS department, d.designation AS designation
+  FROM employees e
+  LEFT JOIN employee_directory d
+    ON d.employee_no = e.employee_code
+    OR (e.employee_code IS NULL AND d.email = e.email)
+`
+
+// An employee row created by promoteToAdmin (or by a sign-in Google had no
+// name for) carries the email's local part as a placeholder - "drprince"
+// rather than a person's name. Whenever the directory knows better, show that
+// instead. A real name from Google is never overridden.
+function withDisplayName(row: EmployeeWithProfile): EmployeeWithProfile {
+  const looksLikePlaceholder = row.name === row.email.split('@')[0]
+  return looksLikePlaceholder && row.directory_name ? { ...row, name: row.directory_name } : row
+}
+
+export function listAdminsWithProfile(): EmployeeWithProfile[] {
+  const rows = getDb()
+    .prepare(`${EMPLOYEE_PROFILE_SELECT} WHERE e.role = 'admin' GROUP BY e.id ORDER BY e.name`)
+    .all() as EmployeeWithProfile[]
+  return rows.map(withDisplayName)
+}
+
+export function getEmployeeWithProfile(id: number): EmployeeWithProfile | null {
+  const row = getDb()
+    .prepare(`${EMPLOYEE_PROFILE_SELECT} WHERE e.id = ? GROUP BY e.id`)
+    .get(id) as EmployeeWithProfile | undefined
+  return row ? withDisplayName(row) : null
+}
+
+export function listEmployeesWithProfile(): EmployeeWithProfile[] {
+  const rows = getDb().prepare(`${EMPLOYEE_PROFILE_SELECT} GROUP BY e.id ORDER BY e.name`).all() as EmployeeWithProfile[]
+  return rows.map(withDisplayName)
+}
+
+export function countAdmins(): number {
+  return (getDb().prepare("SELECT COUNT(*) AS c FROM employees WHERE role = 'admin'").get() as { c: number }).c
+}
+
 // Called when an existing admin adds a new admin by email. If that email has
 // already signed in as an employee, promotes their existing row. Otherwise
-// creates a placeholder row (name = email's local part) that becomes real the
-// moment they actually sign in - see findOrCreateEmployee above.
+// creates a placeholder row that becomes real the moment they actually sign in
+// (see findOrCreateEmployee above). The placeholder name comes from the
+// employee directory when that email is in it, and only falls back to the
+// email's local part when it isn't.
 export function promoteToAdmin(email: string): Employee {
   const existing = getEmployeeByEmail(email)
   if (existing) {
@@ -186,11 +292,18 @@ export function promoteToAdmin(email: string): Employee {
     return getEmployeeById(existing.id)!
   }
   const now = new Date().toISOString()
-  const placeholderName = email.split('@')[0]
+  const placeholderName = getDirectoryByEmail(email)?.name || email.split('@')[0]
   const result = getDb()
     .prepare("INSERT INTO employees (email, name, role, created_at) VALUES (?, ?, 'admin', ?)")
     .run(email, placeholderName, now)
   return getEmployeeById(Number(result.lastInsertRowid))!
+}
+
+// Removing an admin only drops the role - the row, their referral code and
+// every purchase attributed to it stay exactly as they were, so demoting
+// someone never destroys payout history. They keep normal referrer access.
+export function demoteFromAdmin(employeeId: number): void {
+  getDb().prepare("UPDATE employees SET role = 'employee' WHERE id = ?").run(employeeId)
 }
 
 export function getEmployeeByCode(employeeCode: string): Employee | null {
@@ -358,16 +471,31 @@ export function markCouponAdminNotified(id: number): void {
   getDb().prepare('UPDATE coupon_requests SET admin_notified_at = ? WHERE id = ?').run(new Date().toISOString(), id)
 }
 
-export function getPendingCouponRequests(): Array<CouponRequest & { employeeName: string; employeeEmail: string }> {
+export interface PendingCouponRequest extends CouponRequest {
+  employeeName: string
+  employeeEmail: string
+  employeeDepartment: string | null
+  employeeDesignation: string | null
+}
+
+export function getPendingCouponRequests(): PendingCouponRequest[] {
   return getDb()
     .prepare(`
-      SELECT cr.*, e.name AS employeeName, e.email AS employeeEmail
+      SELECT cr.*,
+             COALESCE(NULLIF(e.name, ''), d.name) AS employeeName,
+             e.email AS employeeEmail,
+             d.department AS employeeDepartment,
+             d.designation AS employeeDesignation
       FROM coupon_requests cr
       JOIN employees e ON e.id = cr.employee_id
+      LEFT JOIN employee_directory d
+        ON d.employee_no = e.employee_code
+        OR (e.employee_code IS NULL AND d.email = e.email)
       WHERE cr.status = 'pending'
+      GROUP BY cr.id
       ORDER BY cr.requested_at ASC
     `)
-    .all() as Array<CouponRequest & { employeeName: string; employeeEmail: string }>
+    .all() as PendingCouponRequest[]
 }
 
 export interface AdminOverviewStats {
@@ -375,6 +503,7 @@ export interface AdminOverviewStats {
   couponsRequested: number
   couponsActive: number
   couponsPending: number
+  refereesTracked: number
 }
 
 export function getAdminOverviewStats(): AdminOverviewStats {
@@ -383,7 +512,8 @@ export function getAdminOverviewStats(): AdminOverviewStats {
   const couponsRequested = (db.prepare('SELECT COUNT(*) AS c FROM coupon_requests').get() as { c: number }).c
   const couponsActive = (db.prepare("SELECT COUNT(*) AS c FROM coupon_requests WHERE status = 'active'").get() as { c: number }).c
   const couponsPending = (db.prepare("SELECT COUNT(*) AS c FROM coupon_requests WHERE status = 'pending'").get() as { c: number }).c
-  return { totalEmployees, couponsRequested, couponsActive, couponsPending }
+  const refereesTracked = (db.prepare('SELECT COUNT(*) AS c FROM referral_shares').get() as { c: number }).c
+  return { totalEmployees, couponsRequested, couponsActive, couponsPending, refereesTracked }
 }
 
 export function activateCouponRequest(id: number): void {
@@ -393,18 +523,49 @@ export function activateCouponRequest(id: number): void {
     .run('active', now, now, id)
 }
 
+export interface CouponOwner {
+  employeeId: number
+  name: string
+  department: string | null
+  designation: string | null
+}
+
 // Every employee who currently has an ACTIVE coupon, keyed by uppercased
-// code - used to attribute NPrep purchases back to an employee.
-export function getActiveEmployeeByCoupon(): Map<string, { employeeId: number; name: string }> {
+// code - used to attribute NPrep purchases back to an employee, and to their
+// department for the analytics dashboard.
+export function getActiveEmployeeByCoupon(): Map<string, CouponOwner> {
   const rows = getDb()
     .prepare(`
-      SELECT cr.code, cr.employee_id, e.name
+      SELECT cr.code, cr.employee_id, e.name, e.email, e.employee_code,
+             d.name AS directory_name, d.department, d.designation
       FROM coupon_requests cr
       JOIN employees e ON e.id = cr.employee_id
+      LEFT JOIN employee_directory d
+        ON d.employee_no = e.employee_code
+        OR (e.employee_code IS NULL AND d.email = e.email)
       WHERE cr.status = 'active'
+      GROUP BY cr.id
     `)
-    .all() as Array<{ code: string; employee_id: number; name: string }>
-  return new Map(rows.map((row) => [row.code.toUpperCase(), { employeeId: row.employee_id, name: row.name }]))
+    .all() as Array<{
+    code: string
+    employee_id: number
+    name: string
+    email: string
+    directory_name: string | null
+    department: string | null
+    designation: string | null
+  }>
+  return new Map(
+    rows.map((row) => [
+      row.code.toUpperCase(),
+      {
+        employeeId: row.employee_id,
+        name: row.name === row.email.split('@')[0] && row.directory_name ? row.directory_name : row.name,
+        department: row.department,
+        designation: row.designation,
+      },
+    ]),
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -437,6 +598,109 @@ export function markPayoutPaid(input: {
     `)
     .run(input.purchaseId, input.employeeId, input.couponCode, input.incentiveAmount, now, input.paidByAdminId, now)
   return getDb().prepare('SELECT * FROM payouts WHERE purchase_id = ?').get(input.purchaseId) as Payout
+}
+
+/* ------------------------------------------------------------------ */
+/* Referee tracker (who an employee shared their coupon with)           */
+/* ------------------------------------------------------------------ */
+
+export function listSharesByEmployee(employeeId: number): ReferralShare[] {
+  return getDb()
+    .prepare('SELECT * FROM referral_shares WHERE employee_id = ? ORDER BY shared_at DESC')
+    .all(employeeId) as ReferralShare[]
+}
+
+export function listAllShares(): ReferralShare[] {
+  return getDb().prepare('SELECT * FROM referral_shares').all() as ReferralShare[]
+}
+
+export function getShareById(id: number): ReferralShare | null {
+  const row = getDb().prepare('SELECT * FROM referral_shares WHERE id = ?').get(id) as ReferralShare | undefined
+  return row || null
+}
+
+// Recording a share is idempotent on (employee, phone): re-sharing with the
+// same person updates the name/note and refreshes nothing else, rather than
+// creating a duplicate row that would double-count in the tracker.
+export function recordShare(input: {
+  employeeId: number
+  couponCode: string
+  refereeName: string
+  refereePhone: string
+  channel: string
+  note: string | null
+}): ReferralShare {
+  const phone = normalizePhone(input.refereePhone)
+  const now = new Date().toISOString()
+  getDb()
+    .prepare(`
+      INSERT INTO referral_shares (employee_id, coupon_code, referee_name, referee_phone, channel, note, shared_at)
+      VALUES (@employee_id, @coupon_code, @referee_name, @referee_phone, @channel, @note, @shared_at)
+      ON CONFLICT(employee_id, referee_phone) DO UPDATE SET
+        referee_name = excluded.referee_name,
+        note = COALESCE(excluded.note, referral_shares.note),
+        channel = excluded.channel
+    `)
+    .run({
+      employee_id: input.employeeId,
+      coupon_code: input.couponCode,
+      referee_name: input.refereeName,
+      referee_phone: phone,
+      channel: input.channel,
+      note: input.note,
+      shared_at: now,
+    })
+  return getDb()
+    .prepare('SELECT * FROM referral_shares WHERE employee_id = ? AND referee_phone = ?')
+    .get(input.employeeId, phone) as ReferralShare
+}
+
+export function markShareReminded(id: number, employeeId: number): void {
+  getDb()
+    .prepare('UPDATE referral_shares SET last_reminded_at = ?, channel = ? WHERE id = ? AND employee_id = ?')
+    .run(new Date().toISOString(), 'whatsapp', id, employeeId)
+}
+
+// Scoped by employee_id on purpose: the id alone must not be enough to delete
+// someone else's row.
+export function deleteShare(id: number, employeeId: number): boolean {
+  const result = getDb().prepare('DELETE FROM referral_shares WHERE id = ? AND employee_id = ?').run(id, employeeId)
+  return result.changes > 0
+}
+
+/* ------------------------------------------------------------------ */
+/* Message templates                                                    */
+/* ------------------------------------------------------------------ */
+
+export function listMessageTemplates(): MessageTemplate[] {
+  return getDb()
+    .prepare(`
+      SELECT t.key, t.title, t.description, t.body, t.updated_at, e.name AS updated_by_name
+      FROM message_templates t
+      LEFT JOIN employees e ON e.id = t.updated_by
+      ORDER BY t.rowid
+    `)
+    .all() as MessageTemplate[]
+}
+
+export function getMessageTemplateBody(key: string): string | null {
+  const row = getDb().prepare('SELECT body FROM message_templates WHERE key = ?').get(key) as { body: string } | undefined
+  return row ? row.body : null
+}
+
+// Returns every template body keyed by name, for handing to a client component
+// in one go (the referrer dashboard needs three of them at once).
+export function getMessageTemplateMap(): Record<string, string> {
+  const rows = getDb().prepare('SELECT key, body FROM message_templates').all() as Array<{ key: string; body: string }>
+  return Object.fromEntries(rows.map((row) => [row.key, row.body]))
+}
+
+export function updateMessageTemplate(key: string, body: string, adminId: number): MessageTemplate | null {
+  const result = getDb()
+    .prepare('UPDATE message_templates SET body = ?, updated_at = ?, updated_by = ? WHERE key = ?')
+    .run(body, new Date().toISOString(), adminId, key)
+  if (!result.changes) return null
+  return listMessageTemplates().find((template) => template.key === key) ?? null
 }
 
 export { getDb }

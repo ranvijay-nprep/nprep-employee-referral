@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/auth'
-import { getCouponRequestByEmployeeId, getDirectoryByEmail } from '@/lib/db'
+import { getCouponRequestByEmployeeId, getDirectoryByEmail, getEmployeeWithProfile, getMessageTemplateMap } from '@/lib/db'
 import { ensureReferralForLogin } from '@/lib/autoAssign'
 import EmployeeHome from '@/components/EmployeeHome'
 
@@ -16,5 +16,18 @@ export default async function HomePage() {
 
   const coupon = getCouponRequestByEmployeeId(session.userId)
   const directory = getDirectoryByEmail(session.email)
-  return <EmployeeHome employee={session.employee} coupon={coupon} directoryCode={directory?.employee_no ?? null} />
+  // Read back after the auto-assign above, so a code assigned on this very
+  // request resolves to the right directory row (matched by code, not email).
+  const profile = getEmployeeWithProfile(session.userId)
+
+  return (
+    <EmployeeHome
+      employee={session.employee}
+      coupon={coupon}
+      directoryCode={directory?.employee_no ?? null}
+      department={profile?.department ?? directory?.department ?? null}
+      designation={profile?.designation ?? directory?.designation ?? null}
+      templates={getMessageTemplateMap()}
+    />
+  )
 }

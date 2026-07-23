@@ -14,6 +14,16 @@ export interface Employee {
   created_at: string
 }
 
+// An employee row joined to their `employee_directory` entry (matched on
+// employee_code, or on email while they have no code yet). Department and
+// designation are never stored on `employees` - the directory file is the
+// single source of truth, so re-seeding it updates every screen at once.
+export interface EmployeeWithProfile extends Employee {
+  directory_name: string | null
+  department: string | null
+  designation: string | null
+}
+
 export interface CouponRequest {
   id: number
   employee_id: number
@@ -70,6 +80,8 @@ export interface ReferralRow {
   couponCode: string | null
   employeeId: number | null
   employeeName: string | null
+  employeeDepartment: string | null
+  employeeDesignation: string | null
   createdAt: string | null
   incentiveAmount: number
   isPaid: boolean
@@ -84,4 +96,109 @@ export interface ReferralSummary {
   revenue: number
   incentive: number
   receivable: number
+}
+
+/* ------------------------------------------------------------------ */
+/* Referee tracker                                                      */
+/* ------------------------------------------------------------------ */
+
+// One person an employee shared their coupon with. Rows are created by the
+// employee themselves (when they hit "Share on WhatsApp" or add someone by
+// hand) - this app has no other way to know who a broadcast code reached.
+export interface ReferralShare {
+  id: number
+  employee_id: number
+  coupon_code: string
+  referee_name: string
+  // Normalised to the bare 10-digit national number - see src/lib/phone.ts.
+  // This is what a NPrep purchase is matched against.
+  referee_phone: string
+  channel: string
+  note: string | null
+  shared_at: string
+  last_reminded_at: string | null
+}
+
+// 'purchased'  - a successful purchase on this coupon from that phone number
+// 'in_progress'- a purchase exists but hasn't completed (checkout started)
+// 'failed'     - their only attempt(s) on this coupon failed
+// 'waiting'    - shared, no purchase attempt seen yet
+export type ShareStatus = 'purchased' | 'in_progress' | 'failed' | 'waiting'
+
+export interface ReferralShareRow extends ReferralShare {
+  status: ShareStatus
+  purchaseId: number | null
+  purchasedAt: string | null
+  planName: string | null
+  amount: number | null
+  incentiveAmount: number
+  daysSinceShared: number
+}
+
+/* ------------------------------------------------------------------ */
+/* Message templates                                                    */
+/* ------------------------------------------------------------------ */
+
+export interface MessageTemplate {
+  key: string
+  title: string
+  description: string
+  body: string
+  updated_at: string
+  updated_by_name: string | null
+}
+
+/* ------------------------------------------------------------------ */
+/* Analytics                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface PerformerStat {
+  employeeId: number
+  name: string
+  department: string
+  designation: string
+  couponCode: string
+  total: number
+  successful: number
+  revenue: number
+  incentive: number
+  conversionRate: number
+}
+
+export interface DepartmentStat {
+  department: string
+  referrers: number
+  activeReferrers: number
+  total: number
+  successful: number
+  revenue: number
+  incentive: number
+  conversionRate: number
+}
+
+export interface MonthlyStat {
+  month: string
+  total: number
+  successful: number
+  revenue: number
+}
+
+export interface AnalyticsPayload {
+  generatedAt: string
+  headline: {
+    referrersWithCode: number
+    referrersWithSale: number
+    total: number
+    successful: number
+    revenue: number
+    incentive: number
+    receivable: number
+    conversionRate: number
+    sharesTracked: number
+    sharesConverted: number
+  }
+  topPerformers: PerformerStat[]
+  departments: DepartmentStat[]
+  monthly: MonthlyStat[]
+  planMix: Array<{ planName: string; successful: number; revenue: number }>
 }

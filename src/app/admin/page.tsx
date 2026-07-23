@@ -5,7 +5,8 @@ import {
   getEmployeesNeedingCode,
   getPendingCouponRequests,
   getUnassignedDirectory,
-  listAdmins,
+  listAdminsWithProfile,
+  listMessageTemplates,
 } from '@/lib/db'
 import { ensureReferralForLogin } from '@/lib/autoAssign'
 import AdminDashboard from '@/components/AdminDashboard'
@@ -22,10 +23,13 @@ export default async function AdminPage() {
   const activeEmployees = [...getActiveEmployeeByCoupon().entries()].map(([code, employee]) => ({
     employeeId: employee.employeeId,
     name: employee.name,
+    department: employee.department,
+    designation: employee.designation,
     code,
   }))
-  const admins = listAdmins()
+  const admins = listAdminsWithProfile()
   const overview = getAdminOverviewStats()
+  const messageTemplates = listMessageTemplates()
 
   return (
     <AdminDashboard
@@ -37,6 +41,7 @@ export default async function AdminPage() {
       directoryOptions={directoryOptions}
       pendingRequests={pendingRequests}
       activeEmployees={activeEmployees}
+      messageTemplates={messageTemplates}
     />
   )
 }

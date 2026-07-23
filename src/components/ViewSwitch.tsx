@@ -1,15 +1,19 @@
-import { ShieldCheck, Ticket } from 'lucide-react'
+import { BarChart3, ShieldCheck, Ticket } from 'lucide-react'
 
-// Admin-only segmented control to switch between the Admin dashboard (/admin)
-// and the personal Referrer dashboard (/). The current view renders as a
-// non-clickable label; the other as a link. Only render this for admins -
-// regular employees have no admin view to switch to.
+// Admin-only segmented control to move between the Admin dashboard (/admin),
+// the Analytics dashboard (/admin/analytics) and the personal Referrer
+// dashboard (/). The current view renders as a non-clickable label; the others
+// as links. Only render this for admins - regular employees have no admin view
+// to switch to.
 const OPTIONS = [
   { key: 'admin', label: 'Admin', href: '/admin', Icon: ShieldCheck },
+  { key: 'analytics', label: 'Analytics', href: '/admin/analytics', Icon: BarChart3 },
   { key: 'referrer', label: 'Referrer', href: '/', Icon: Ticket },
 ] as const
 
-export default function ViewSwitch({ current }: { current: 'admin' | 'referrer' }) {
+export type ViewSwitchKey = (typeof OPTIONS)[number]['key']
+
+export default function ViewSwitch({ current }: { current: ViewSwitchKey }) {
   return (
     <div className="view-switch" role="group" aria-label="Switch dashboard view">
       {OPTIONS.map(({ key, label, href, Icon }) =>

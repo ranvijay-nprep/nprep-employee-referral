@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { CheckCircle2, ShieldPlus, XCircle } from 'lucide-react'
-import type { Employee } from '@/lib/types'
+import type { EmployeeWithProfile } from '@/lib/types'
 
-export default function AddAdminForm({ onAdded }: { onAdded: (employee: Employee) => void }) {
+export default function AddAdminForm({ onAdded }: { onAdded: (employee: EmployeeWithProfile) => void }) {
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
@@ -19,7 +19,7 @@ export default function AddAdminForm({ onAdded }: { onAdded: (employee: Employee
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
       })
-      const data = (await response.json()) as { employee?: Employee; error?: string }
+      const data = (await response.json()) as { employee?: EmployeeWithProfile; error?: string }
       if (!response.ok || !data.employee) throw new Error(data.error || 'Something went wrong')
       onAdded(data.employee)
       setMessage({ tone: 'ok', text: `${data.employee.email} is now an admin.` })

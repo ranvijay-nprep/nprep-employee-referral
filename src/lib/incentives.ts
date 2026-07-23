@@ -17,24 +17,35 @@ interface IncentiveTier {
 // coupon in NPrep itself - mirrored here only so the app can state it.
 export const STUDENT_DISCOUNT_PERCENT = 40
 
+// `subs` are NPrep `subscriptions.id` values. Every sellable plan in NPrep is
+// listed here on purpose: a plan that is missing pays Rs.0 *silently*, which is
+// how GNM, M.Sc and the NORCET/RRB/KGMU/CHO plans went unpaid before. Deliberately
+// excluded are only the dummy/deleted plans (18, 22-27) - do NOT map those.
+// When NPrep adds a new plan, add it here too, or referrals on it earn nothing.
 const TIERS: IncentiveTier[] = [
   {
     label: 'College & Gold plans',
-    covers: 'BSc 1st, 2nd, 3rd & 4th Year, BSc 3rd + 4th, and Gold - any duration',
+    covers: 'BSc & GNM 1st-4th Year, BSc 3rd + 4th, M.Sc Nursing Entrance, 12 & 24 Month Courses, Gold - any duration',
     amount: 1200,
-    subs: [1, 2, 3, 13, 17, 9],
+    subs: [
+      1, 2, 3, 13, 17, // BSc 1st / 2nd / 3rd / 4th Year, BSc 3rd + 4th
+      5, 6, 7, // GNM 1st / 2nd / 3rd Year
+      9, // GOLD Batch
+      10, // M.Sc Nursing Entrance
+      11, 12, // 12 Months Course, 24 Months Course
+    ],
   },
   {
     label: 'Rapid Revision',
-    covers: 'Rapid Revision 2.0 - any duration',
+    covers: 'Rapid Revision 2.0, NORCET 10 and RRB Rapid Revision - any duration',
     amount: 700,
-    subs: [8],
+    subs: [8, 16, 21],
   },
   {
     label: 'QBank & Test Series',
-    covers: 'QBank + Test Series - any duration',
+    covers: 'QBank + Test Series and the NORCET 10 / KGMU / RRB / CHO test series - any duration',
     amount: 500,
-    subs: [4],
+    subs: [4, 19, 20, 14, 15],
   },
 ]
 

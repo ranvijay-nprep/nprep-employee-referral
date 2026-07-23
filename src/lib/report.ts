@@ -13,12 +13,18 @@ export interface GetReportOptions {
   toDate?: string | null
   purchaseIds?: number[]
   maskContact?: boolean
+  // Caps how many purchase rows come back. The default keeps the on-screen
+  // report responsive; the analytics dashboard raises it because it aggregates
+  // over everything rather than listing rows.
+  limit?: number
 }
+
+const DEFAULT_ROW_LIMIT = 1000
 
 export { getActiveEmployeeByCoupon }
 
 export async function getReferralReport(options: GetReportOptions): Promise<{ rows: ReferralRow[]; summary: ReferralSummary }> {
-  const { couponCodes, status = 'all', fromDate, toDate, purchaseIds, maskContact = true } = options
+  const { couponCodes, status = 'all', fromDate, toDate, purchaseIds, maskContact = true, limit = DEFAULT_ROW_LIMIT } = options
   const employeeByCoupon = getActiveEmployeeByCoupon()
 
   const couponList = couponCodes.map((code) => code.trim().toUpperCase()).filter(Boolean)
@@ -26,6 +32,9 @@ export async function getReferralReport(options: GetReportOptions): Promise<{ ro
 
   const params: Array<string | number> = [...couponList]
   const couponPlaceholders = couponList.map(() => '?').join(', ')
+
+  // Inlined into the SQL rather than bound, so it is forced to an integer here.
+  const rowLimit = Math.max(1, Math.floor(Number(limit)) || DEFAULT_ROW_LIMIT)
 
   const idList = [...new Set((purchaseIds || []).filter(Boolean))]
   const idsWhere = idList.length ? `AND sp.id IN (${idList.map(() => '?').join(', ')})` : ''
@@ -64,7 +73,7 @@ export async function getReferralReport(options: GetReportOptions): Promise<{ ro
         ${fromDate ? 'AND DATE(sp.created_at) >= ?' : ''}
         ${toDate ? 'AND DATE(sp.created_at) <= ?' : ''}
       ORDER BY sp.created_at DESC
-      LIMIT 1000
+      LIMIT ${rowLimit}
     `,
     params,
   )
@@ -88,6 +97,8 @@ export async function getReferralReport(options: GetReportOptions): Promise<{ ro
       couponCode: row.coupon_code,
       employeeId: employee?.employeeId || null,
       employeeName: employee?.name || null,
+      employeeDepartment: employee?.department || null,
+      employeeDesignation: employee?.designation || null,
       createdAt: row.created_at as string | null,
       incentiveAmount: successful ? incentiveForPurchase(row.plan_id) : 0,
       isPaid: Boolean(payout),

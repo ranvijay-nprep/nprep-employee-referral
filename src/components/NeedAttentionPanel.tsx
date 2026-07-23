@@ -80,6 +80,7 @@ export default function NeedAttentionPanel({
               <tr>
                 <th>Signed in as</th>
                 <th>Directory entry</th>
+                <th>Department &amp; designation</th>
                 <th>Referral coupon</th>
                 <th />
               </tr>
@@ -87,6 +88,7 @@ export default function NeedAttentionPanel({
             <tbody>
               {list.map((row) => {
                 const picked = picks[row.id] || ''
+                const pickedEntry = options.find((option) => option.employee_no === picked)
                 return (
                   <tr key={row.id}>
                     <td>
@@ -103,10 +105,22 @@ export default function NeedAttentionPanel({
                         {options.map((option) => (
                           <option key={option.employee_no} value={option.employee_no}>
                             {option.employee_no} — {option.name}
+                            {option.department ? ` · ${option.department}` : ''}
                             {option.email ? ` (${option.email})` : ''}
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td>
+                      {pickedEntry ? (
+                        <>
+                          {pickedEntry.department || '—'}
+                          <br />
+                          <small>{pickedEntry.designation || '—'}</small>
+                        </>
+                      ) : (
+                        <span className="muted-cell">—</span>
+                      )}
                     </td>
                     <td>
                       {picked ? <b>{buildEmployeeCouponCode(picked)}</b> : <span style={{ color: 'var(--muted)' }}>—</span>}

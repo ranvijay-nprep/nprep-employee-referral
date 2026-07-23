@@ -22,7 +22,17 @@ interface ReportResponse {
   summary: ReferralSummary
 }
 
-export default function ReportView({ isAdmin, employeeId, personal }: { isAdmin: boolean; employeeId?: string; personal?: boolean }) {
+export default function ReportView({
+  isAdmin,
+  employeeIds,
+  personal,
+}: {
+  isAdmin: boolean
+  // Zero or more employees to scope an admin report to. Undefined/empty means
+  // "everyone with an active coupon".
+  employeeIds?: string[]
+  personal?: boolean
+}) {
   const [data, setData] = useState<ReportResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('all')
@@ -31,12 +41,17 @@ export default function ReportView({ isAdmin, employeeId, personal }: { isAdmin:
   const [importSummary, setImportSummary] = useState<{ requested: number; marked: number; alreadyPaid: number; invalid: number[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // The parent rebuilds `employeeIds` on every render, so the effect below
+  // depends on its VALUE, not the array identity - otherwise it would refetch
+  // in a loop.
+  const employeeKey = (employeeIds || []).join(',')
+
   const load = async () => {
     setError('')
     setLoading(true)
     try {
       const params = new URLSearchParams({ status })
-      if (employeeId) params.set('employeeId', employeeId)
+      if (employeeKey) params.set('employeeIds', employeeKey)
       if (personal) params.set('scope', 'self')
       const response = await fetch(`/api/report?${params}`)
       if (!response.ok) throw new Error(await response.text())
@@ -51,7 +66,7 @@ export default function ReportView({ isAdmin, employeeId, personal }: { isAdmin:
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, employeeId])
+  }, [status, employeeKey])
 
   const markPaid = async (purchaseId: number) => {
     setBusyId(purchaseId)
@@ -171,6 +186,7 @@ export default function ReportView({ isAdmin, employeeId, personal }: { isAdmin:
                 <th>Student</th>
                 <th>Plan</th>
                 {isAdmin ? <th>Employee</th> : null}
+                {isAdmin ? <th>Department</th> : null}
                 <th>Purchase Amount</th>
                 <th>Purchase Status</th>
                 <th>Incentive Earned</th>
@@ -190,7 +206,18 @@ export default function ReportView({ isAdmin, employeeId, personal }: { isAdmin:
                       <td>
                         {row.planName} {row.planDuration}
                       </td>
-                      {isAdmin ? <td>{row.employeeName || '—'}</td> : null}
+                      {isAdmin ? (
+                        <td>
+                          {row.employeeName || '—'}
+                          {row.employeeDesignation ? (
+                            <>
+                              <br />
+                              <small>{row.employeeDesignation}</small>
+                            </>
+                          ) : null}
+                        </td>
+                      ) : null}
+                      {isAdmin ? <td>{row.employeeDepartment || <span className="muted-cell">—</span>}</td> : null}
                       <td>Rs. {row.price}</td>
                       <td>
                         <StatusChip row={row} />
@@ -258,6 +285,11 @@ function SkeletonRow({ isAdmin }: { isAdmin: boolean }) {
       {isAdmin ? (
         <td>
           <div className="skeleton" style={{ height: '0.9rem', width: '60%' }} />
+        </td>
+      ) : null}
+      {isAdmin ? (
+        <td>
+          <div className="skeleton" style={{ height: '0.9rem', width: '55%' }} />
         </td>
       ) : null}
       <td>

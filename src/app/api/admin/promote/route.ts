@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { promoteToAdmin } from '@/lib/db'
+import { getEmployeeWithProfile, promoteToAdmin } from '@/lib/db'
 import { isAllowedEmail } from '@/lib/domain'
 
 export async function POST(request: NextRequest) {
@@ -14,5 +14,7 @@ export async function POST(request: NextRequest) {
   }
 
   const employee = promoteToAdmin(email)
-  return NextResponse.json({ employee })
+  // Return the directory-joined row so the admin table can show the new
+  // admin's real name, department and designation without a page reload.
+  return NextResponse.json({ employee: getEmployeeWithProfile(employee.id) ?? employee })
 }
