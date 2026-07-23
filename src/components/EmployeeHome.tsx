@@ -8,6 +8,7 @@ import LogoutButton from '@/components/LogoutButton'
 import IncentiveRateCard from '@/components/IncentiveRateCard'
 import ViewSwitch from '@/components/ViewSwitch'
 import { buildEmployeeCouponCode } from '@/lib/couponCode'
+import { STUDENT_DISCOUNT_PERCENT } from '@/lib/incentives'
 import type { CouponRequest, Employee } from '@/lib/types'
 
 // Who employees are told to ask when their account isn't in the directory.
@@ -27,7 +28,7 @@ export default function EmployeeHome({
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   const copyShareMessage = async (code: string) => {
-    const text = `Use my NPrep referral code ${code} to get a discount!`
+    const text = `Use my NPrep referral code ${code} to get ${STUDENT_DISCOUNT_PERCENT}% off any NPrep plan!`
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text)
@@ -105,7 +106,7 @@ export default function EmployeeHome({
               <Share2 size={20} />
               <h2>Share your code</h2>
             </div>
-            <p>Send this to anyone who wants to buy an NPrep plan:</p>
+            <p>Send this to anyone who wants to buy an NPrep plan - they get {STUDENT_DISCOUNT_PERCENT}% off:</p>
             <div className="share-code">{current.code}</div>
             <p style={{ marginTop: '0.75rem' }}>
               <button className="secondary" onClick={() => copyShareMessage(current.code)}>

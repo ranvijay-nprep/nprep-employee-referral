@@ -89,7 +89,7 @@ export async function getReferralReport(options: GetReportOptions): Promise<{ ro
       employeeId: employee?.employeeId || null,
       employeeName: employee?.name || null,
       createdAt: row.created_at as string | null,
-      incentiveAmount: successful ? incentiveForPurchase(row.plan_id, row.unit, row.duration) : 0,
+      incentiveAmount: successful ? incentiveForPurchase(row.plan_id) : 0,
       isPaid: Boolean(payout),
       paidAt: payout?.paid_at || null,
     }

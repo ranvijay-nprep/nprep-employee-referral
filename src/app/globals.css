@@ -476,26 +476,40 @@ select:hover {
 }
 
 .rate-card-plan-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.rate-card-plan-name {
   font-weight: 700;
   color: var(--navy);
-  white-space: nowrap;
-  width: 1%;
+}
+
+.rate-card-plan-covers {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.student-discount-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #eef2ff, #e6f3fb);
+  border-radius: 12px;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.85rem;
+  color: var(--navy);
 }
 
 .rate-tier-chip {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.4rem;
   background: linear-gradient(135deg, #eef2ff, #e6f3fb);
   border-radius: 999px;
   padding: 0.3rem 0.8rem;
   margin: 0.2rem 0.4rem 0.2rem 0;
-}
-
-.rate-tier-duration {
-  font-size: 0.78rem;
-  color: var(--muted);
-  white-space: nowrap;
 }
 
 .rate-tier-amount {
