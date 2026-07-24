@@ -85,7 +85,13 @@ export default function ReportView({
     setError('')
     setImportSummary(null)
     try {
-      const response = await fetch('/api/report?status=successful')
+      // Must carry the SAME scope as the table on screen. Without this, an
+      // admin who had filtered to one department still downloaded a payout
+      // sheet for the whole company - and then re-uploaded it as "paid".
+      const params = new URLSearchParams({ status: 'successful' })
+      if (employeeKey) params.set('employeeIds', employeeKey)
+      if (personal) params.set('scope', 'self')
+      const response = await fetch(`/api/report?${params}`)
       if (!response.ok) throw new Error(await response.text())
       const report = (await response.json()) as ReportResponse
       const rows = report.rows.filter((row) => row.isSuccessful && row.incentiveAmount > 0)
@@ -179,7 +185,7 @@ export default function ReportView({
           </p>
         ) : null}
 
-        <div style={{ overflowX: 'auto', marginTop: '1rem' }}>
+        <div className="table-scroll" style={{ marginTop: '1rem' }}>
           <table className="referral-table">
             <thead>
               <tr>

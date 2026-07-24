@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertCircle, ShieldCheck, UserMinus } from 'lucide-react'
+import { AlertCircle, UserMinus } from 'lucide-react'
 import AddAdminForm from '@/components/AddAdminForm'
 import type { EmployeeWithProfile } from '@/lib/types'
 
@@ -43,12 +43,13 @@ export default function AdminsPanel({
   }
 
   return (
-    <div className="card fade-in-delay-1">
-      <div className="card-title-row">
-        <ShieldCheck size={20} />
-        <h2>Admins ({list.length})</h2>
-      </div>
-      <p>Anyone added here gets full admin access the moment they sign in with that @nprep.in account.</p>
+    <div className="card fade-in">
+      {/* No card title: this panel now sits on its own /admin/team page whose
+          header already says "Admins". */}
+      <p>
+        Anyone added here gets full admin access the moment they sign in with that @nprep.in account. Removing someone
+        only takes the role away — they keep their referral code and every referral already credited to them.
+      </p>
 
       {error ? (
         <div className="error-banner">
@@ -56,7 +57,7 @@ export default function AdminsPanel({
         </div>
       ) : null}
 
-      <div style={{ overflowX: 'auto' }}>
+      <div className="table-scroll">
         <table className="referral-table" style={{ marginBottom: '1rem' }}>
           <thead>
             <tr>

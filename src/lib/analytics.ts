@@ -1,4 +1,5 @@
 import { getActiveEmployeeByCoupon } from '@/lib/db'
+import type { CouponOwner } from '@/lib/db'
 import { getReferralReport } from '@/lib/report'
 import { summariseAllShares } from '@/lib/shares'
 import type { AnalyticsPayload, DepartmentStat, MonthlyStat, PerformerStat, ReferralRow } from '@/lib/types'
@@ -27,8 +28,16 @@ export async function getAnalytics(options: { fromDate?: string | null; toDate?:
         })
       : { rows: [] as ReferralRow[] }
 
-  const shares = summariseAllShares(rows)
+  return buildAnalytics(rows, owners, summariseAllShares(rows))
+}
 
+// The aggregation itself: pure, no I/O, so it can be exercised directly
+// against fabricated purchase rows.
+export function buildAnalytics(
+  rows: ReferralRow[],
+  owners: Map<string, CouponOwner>,
+  shares: { tracked: number; converted: number },
+): AnalyticsPayload {
   /* Per-employee ------------------------------------------------------ */
   // Seeded from the coupon owners, not from the purchase rows, so a referrer
   // with an active code and zero sales still appears (at the bottom) instead

@@ -236,15 +236,22 @@ export function listAdmins(): Employee[] {
 
 // Joins `employees` to its `employee_directory` entry so every screen can show
 // department/designation without storing (and having to re-sync) them on the
-// employee row. Two mutually exclusive match paths: by the assigned code, or -
-// while someone has no code yet - by login email. GROUP BY guards against a
-// directory that ever ends up with two rows for one email.
+// employee row.
+//
+// Two independent joins rather than one OR'd join: the assigned code is the
+// authoritative match and wins, but the email match is ALWAYS available as a
+// fallback. (An OR would silently blank someone's department the moment they
+// got a code that no directory row carries - e.g. after a directory re-import
+// renumbered them.) GROUP BY guards against a directory that ever ends up with
+// two rows for one email.
 const EMPLOYEE_PROFILE_SELECT = `
-  SELECT e.*, d.name AS directory_name, d.department AS department, d.designation AS designation
+  SELECT e.*,
+         COALESCE(byCode.name, byEmail.name)               AS directory_name,
+         COALESCE(byCode.department, byEmail.department)   AS department,
+         COALESCE(byCode.designation, byEmail.designation) AS designation
   FROM employees e
-  LEFT JOIN employee_directory d
-    ON d.employee_no = e.employee_code
-    OR (e.employee_code IS NULL AND d.email = e.email)
+  LEFT JOIN employee_directory byCode ON byCode.employee_no = e.employee_code
+  LEFT JOIN employee_directory byEmail ON byEmail.email = e.email
 `
 
 // An employee row created by promoteToAdmin (or by a sign-in Google had no
@@ -311,18 +318,23 @@ export function getEmployeeByCode(employeeCode: string): Employee | null {
   return row || null
 }
 
-// People who have signed in but have no referral code yet: no employee_code
-// AND no coupon of their own. With auto-assign-on-login, this means their login
-// email wasn't found in the directory (e.g. their directory row lists a
-// personal email), so an admin must link them from the "Need attention" panel.
-// Anyone who already has a coupon is excluded - nothing to action.
+// People an admin genuinely has to act on: no code, no coupon, AND no
+// directory row matching their login email.
+//
+// That last condition is the whole point of the panel and used to be missing.
+// Anyone whose email IS in the directory gets their code automatically on
+// their next authenticated request (see ensureReferralForLogin), so listing
+// them as "needs attention" is noise an admin can do nothing about - and it
+// also surfaced placeholder rows created by promoteToAdmin for people who
+// have never signed in at all.
 export function getEmployeesNeedingCode(): Employee[] {
   return getDb()
     .prepare(`
       SELECT e.*
       FROM employees e
       LEFT JOIN coupon_requests cr ON cr.employee_id = e.id
-      WHERE e.employee_code IS NULL AND cr.id IS NULL
+      LEFT JOIN employee_directory d ON d.email = e.email
+      WHERE e.employee_code IS NULL AND cr.id IS NULL AND d.employee_no IS NULL
       ORDER BY e.created_at ASC
     `)
     .all() as Employee[]
@@ -482,15 +494,14 @@ export function getPendingCouponRequests(): PendingCouponRequest[] {
   return getDb()
     .prepare(`
       SELECT cr.*,
-             COALESCE(NULLIF(e.name, ''), d.name) AS employeeName,
+             COALESCE(NULLIF(e.name, ''), byCode.name, byEmail.name)  AS employeeName,
              e.email AS employeeEmail,
-             d.department AS employeeDepartment,
-             d.designation AS employeeDesignation
+             COALESCE(byCode.department, byEmail.department)          AS employeeDepartment,
+             COALESCE(byCode.designation, byEmail.designation)        AS employeeDesignation
       FROM coupon_requests cr
       JOIN employees e ON e.id = cr.employee_id
-      LEFT JOIN employee_directory d
-        ON d.employee_no = e.employee_code
-        OR (e.employee_code IS NULL AND d.email = e.email)
+      LEFT JOIN employee_directory byCode ON byCode.employee_no = e.employee_code
+      LEFT JOIN employee_directory byEmail ON byEmail.email = e.email
       WHERE cr.status = 'pending'
       GROUP BY cr.id
       ORDER BY cr.requested_at ASC
@@ -508,7 +519,10 @@ export interface AdminOverviewStats {
 
 export function getAdminOverviewStats(): AdminOverviewStats {
   const db = getDb()
-  const totalEmployees = (db.prepare("SELECT COUNT(*) AS c FROM employees WHERE role = 'employee'").get() as { c: number }).c
+  // Every signed-up person, admins included - admins are referrers too (they
+  // get their own code from the same auto-assign path), so excluding them
+  // under-reported the headcount.
+  const totalEmployees = (db.prepare('SELECT COUNT(*) AS c FROM employees').get() as { c: number }).c
   const couponsRequested = (db.prepare('SELECT COUNT(*) AS c FROM coupon_requests').get() as { c: number }).c
   const couponsActive = (db.prepare("SELECT COUNT(*) AS c FROM coupon_requests WHERE status = 'active'").get() as { c: number }).c
   const couponsPending = (db.prepare("SELECT COUNT(*) AS c FROM coupon_requests WHERE status = 'pending'").get() as { c: number }).c
@@ -536,13 +550,14 @@ export interface CouponOwner {
 export function getActiveEmployeeByCoupon(): Map<string, CouponOwner> {
   const rows = getDb()
     .prepare(`
-      SELECT cr.code, cr.employee_id, e.name, e.email, e.employee_code,
-             d.name AS directory_name, d.department, d.designation
+      SELECT cr.code, cr.employee_id, e.name, e.email,
+             COALESCE(byCode.name, byEmail.name)               AS directory_name,
+             COALESCE(byCode.department, byEmail.department)   AS department,
+             COALESCE(byCode.designation, byEmail.designation) AS designation
       FROM coupon_requests cr
       JOIN employees e ON e.id = cr.employee_id
-      LEFT JOIN employee_directory d
-        ON d.employee_no = e.employee_code
-        OR (e.employee_code IS NULL AND d.email = e.email)
+      LEFT JOIN employee_directory byCode ON byCode.employee_no = e.employee_code
+      LEFT JOIN employee_directory byEmail ON byEmail.email = e.email
       WHERE cr.status = 'active'
       GROUP BY cr.id
     `)

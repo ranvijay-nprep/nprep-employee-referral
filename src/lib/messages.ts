@@ -88,3 +88,17 @@ export function renderTemplate(body: string, vars: TemplateVars): string {
 export function getDefaultTemplateBody(key: string): string {
   return MESSAGE_TEMPLATES.find((template) => template.key === key)?.body ?? ''
 }
+
+// The notice banner is MEANT to be blankable - an empty body is how an admin
+// turns it off. Every other template is copy that gets sent to a student, so
+// blank is never a valid outcome.
+const BLANKABLE_TEMPLATE_KEYS = new Set(['employee_notice'])
+
+// Resolves what to actually send. An admin who clears a share template (or a
+// row that somehow never got seeded) must not result in an empty WhatsApp
+// message going to a student - fall back to the built-in default instead.
+export function resolveTemplateBody(templates: Record<string, string>, key: string): string {
+  const stored = templates[key]
+  if (BLANKABLE_TEMPLATE_KEYS.has(key)) return stored ?? ''
+  return stored && stored.trim() ? stored : getDefaultTemplateBody(key)
+}

@@ -85,6 +85,55 @@ only a UI hint, not a security boundary).
 The admin dashboard (`/admin`) also lists pending requests directly, as a
 fallback in case an email gets lost.
 
+## Department & designation
+
+Neither is stored on the `employees` row. Both are read live from
+`employee_directory` (seeded from `data/directory.json`) via a join that
+prefers the assigned employee code and falls back to the login email - see
+`EMPLOYEE_PROFILE_SELECT` in `src/lib/db.ts`. Re-importing the directory file
+therefore updates every screen at once, with no migration and nothing to
+re-sync. The same join is what makes an admin added by email show up under
+their real name instead of the email's local part.
+
+## Referee tracker (who actually bought)
+
+A coupon is a broadcast code, so NPrep's purchase rows carry no notion of
+*who an employee sent it to*. The tracker closes that gap:
+
+1. The employee sends their coupon to someone from the referrer dashboard -
+   name + mobile number - which opens WhatsApp with the message prefilled and
+   records a `referral_shares` row.
+2. Status is never stored. On every load, `src/lib/shares.ts` matches that
+   number against `users.phone_number` on purchases made with the employee's
+   coupon, so a purchase later refunded in NPrep stops reading as converted on
+   its own. Both sides go through `normalizePhone` first, so `+91 98765 43210`
+   and `9876543210` are the same person.
+3. Anyone still unconverted gets a one-click WhatsApp reminder.
+
+If NPrep's DB can't be reached the tracker says so rather than showing
+everyone as "not purchased yet", which would look like a real zero.
+
+## Message management
+
+Every message an employee sends a student lives in the `message_templates`
+table and is edited by admins at `/admin` - the WhatsApp first-share, the
+WhatsApp reminder, the copy/paste text, and an optional notice banner shown on
+the referrer dashboard. `src/lib/messages.ts` holds the built-in defaults
+(used to seed the table and as a fallback) plus the `{{code}}` / `{{name}}` /
+`{{discount}}` / `{{referrer}}` / `{{link}}` substitution both the admin
+preview and the employee's browser share.
+
+Editing copy needs no deploy. Seeding only ever inserts - it re-syncs each
+template's title/description but never overwrites a body an admin has edited.
+
+## Analytics (`/admin/analytics`)
+
+Top performers, department-wise breakdowns, a monthly trend and the plan mix,
+all derived from a single pass over the same rows the payout report uses
+(`buildAnalytics` in `src/lib/analytics.ts` is pure, so the numbers can never
+disagree with the payouts screen). Referrers with an active code and no sales
+stay on the leaderboard rather than vanishing from it.
+
 ## Local setup
 
 ```bash
@@ -125,7 +174,11 @@ The SQLite file is created automatically at `SQLITE_DB_PATH` on first run
 
 ## What's intentionally not built (yet)
 
-- Click-tracking/funnel analytics on shared codes - agreed to defer past MVP.
+- Click-tracking on shared codes. The referee tracker above is *self-reported*
+  (the employee records who they sent it to); nothing instruments the link
+  itself, so a code forwarded on by a student is invisible to it.
+- Removing an admin only drops the role - it never deletes the employee row,
+  their code, or their referral history, and an admin can't remove themselves.
 - Automated bank-transfer payouts - "Mark Paid" here is bookkeeping only, same
   as in navigator-ts; real payment should go through payroll for tax/TDS
   compliance reasons (employees are on payroll, not external contractors).

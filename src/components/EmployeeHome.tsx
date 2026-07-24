@@ -10,7 +10,7 @@ import ShareTracker from '@/components/ShareTracker'
 import ViewSwitch from '@/components/ViewSwitch'
 import WhatsAppButton from '@/components/WhatsAppButton'
 import { buildEmployeeCouponCode } from '@/lib/couponCode'
-import { STUDENT_APP_URL, getDefaultTemplateBody, renderTemplate } from '@/lib/messages'
+import { STUDENT_APP_URL, renderTemplate, resolveTemplateBody } from '@/lib/messages'
 import { STUDENT_DISCOUNT_PERCENT } from '@/lib/incentives'
 import type { CouponRequest, Employee } from '@/lib/types'
 
@@ -38,7 +38,9 @@ export default function EmployeeHome({
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   const firstName = employee.name.split(' ')[0]
-  const template = (key: string) => templates[key] ?? getDefaultTemplateBody(key)
+  // resolveTemplateBody, not a bare lookup: an admin who clears a share
+  // template must not cause an empty WhatsApp message to be sent.
+  const template = (key: string) => resolveTemplateBody(templates, key)
   const notice = (templates.employee_notice ?? '').trim()
 
   // The generic (not-to-a-specific-person) fill: no referee name is known, so

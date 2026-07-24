@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   AlertCircle,
   Award,
-  BarChart3,
   Building2,
   CalendarDays,
   IndianRupee,
@@ -15,8 +14,6 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react'
-import LogoutButton from '@/components/LogoutButton'
-import ViewSwitch from '@/components/ViewSwitch'
 import type { AnalyticsPayload } from '@/lib/types'
 
 // Every chart here plots ONE series, so each is a single-hue magnitude
@@ -29,7 +26,7 @@ const RANGES = [
   { key: 'all', label: 'All time', days: 0 },
 ] as const
 
-export default function AnalyticsDashboard({ adminName }: { adminName: string }) {
+export default function AnalyticsDashboard() {
   const [range, setRange] = useState<string>('90')
   const [data, setData] = useState<AnalyticsPayload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -64,21 +61,11 @@ export default function AnalyticsDashboard({ adminName }: { adminName: string })
   const headline = data?.headline
 
   return (
-    <main className="page">
-      <div className="page-header fade-in">
-        <div>
-          <h1>Referral Analytics</h1>
-          <div className="profile-chips">
-            <span className="profile-chip">
-              <BarChart3 size={13} /> {adminName.split(' ')[0]}&apos;s view
-            </span>
-          </div>
-        </div>
-        <div className="header-actions">
-          <ViewSwitch current="analytics" />
-          <LogoutButton />
-        </div>
-      </div>
+    <>
+      <header className="admin-page-header">
+        <h1>Analytics</h1>
+        <p>Who is selling, which departments are pulling their weight, and where the revenue comes from.</p>
+      </header>
 
       <div className="card fade-in">
         <div className="filter-row">
@@ -169,7 +156,7 @@ export default function AnalyticsDashboard({ adminName }: { adminName: string })
               <div className="empty">No successful sales in this period yet.</div>
             )}
 
-            <div style={{ overflowX: 'auto', marginTop: '1.25rem' }}>
+            <div className="table-scroll" style={{ marginTop: '1.25rem' }}>
               <table className="referral-table">
                 <thead>
                   <tr>
@@ -228,7 +215,7 @@ export default function AnalyticsDashboard({ adminName }: { adminName: string })
               <div className="empty">No department has a successful sale in this period yet.</div>
             )}
 
-            <div style={{ overflowX: 'auto', marginTop: '1.25rem' }}>
+            <div className="table-scroll" style={{ marginTop: '1.25rem' }}>
               <table className="referral-table">
                 <thead>
                   <tr>
@@ -297,7 +284,7 @@ export default function AnalyticsDashboard({ adminName }: { adminName: string })
           </div>
         </>
       ) : null}
-    </main>
+    </>
   )
 }
 

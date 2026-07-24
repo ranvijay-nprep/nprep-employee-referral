@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertCircle, CheckCircle2, MessageSquareText, RotateCcw, Save } from 'lucide-react'
+import { AlertCircle, CheckCircle2, RotateCcw, Save } from 'lucide-react'
 import { TEMPLATE_VARIABLES, getDefaultTemplateBody, renderTemplate } from '@/lib/messages'
+import { formatDate } from '@/lib/dates'
 import type { MessageTemplate } from '@/lib/types'
 
 // Admin control over every message employees send to students. Editing here
@@ -43,13 +44,8 @@ export default function MessageManager({ templates }: { templates: MessageTempla
 
   return (
     <div className="card fade-in-delay-1">
-      <div className="card-title-row">
-        <MessageSquareText size={20} />
-        <h2>Message management</h2>
-      </div>
       <p>
-        This is the exact text employees send to students. Edit it here and every referrer picks up the change
-        immediately — nothing needs redeploying.
+        Use these placeholders anywhere in a message — each one is swapped for the real value when an employee sends it.
       </p>
 
       <div className="variable-legend">
@@ -78,7 +74,7 @@ export default function MessageManager({ templates }: { templates: MessageTempla
                 <p>{template.description}</p>
               </div>
               <small className="muted-cell">
-                Updated {new Date(template.updated_at).toLocaleDateString()}
+                Updated {formatDate(template.updated_at)}
                 {template.updated_by_name ? ` by ${template.updated_by_name}` : ''}
               </small>
             </div>

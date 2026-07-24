@@ -75,79 +75,83 @@ export default function NeedAttentionPanel({
               No unassigned directory entries left — add them to the directory file first.
             </p>
           ) : null}
-          <table className="referral-table">
-            <thead>
-              <tr>
-                <th>Signed in as</th>
-                <th>Directory entry</th>
-                <th>Department &amp; designation</th>
-                <th>Referral coupon</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((row) => {
-                const picked = picks[row.id] || ''
-                const pickedEntry = options.find((option) => option.employee_no === picked)
-                return (
-                  <tr key={row.id}>
-                    <td>
-                      {row.name}
-                      <br />
-                      <small>{row.email}</small>
-                    </td>
-                    <td>
-                      <select
-                        value={picked}
-                        onChange={(event) => setPicks((prev) => ({ ...prev, [row.id]: event.target.value }))}
-                      >
-                        <option value="">Select employee…</option>
-                        {options.map((option) => (
-                          <option key={option.employee_no} value={option.employee_no}>
-                            {option.employee_no} — {option.name}
-                            {option.department ? ` · ${option.department}` : ''}
-                            {option.email ? ` (${option.email})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      {pickedEntry ? (
-                        <>
-                          {pickedEntry.department || '—'}
-                          <br />
-                          <small>{pickedEntry.designation || '—'}</small>
-                        </>
-                      ) : (
-                        <span className="muted-cell">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {picked ? <b>{buildEmployeeCouponCode(picked)}</b> : <span style={{ color: 'var(--muted)' }}>—</span>}
-                    </td>
-                    <td>
-                      <button className="primary" onClick={() => approve(row.id)} disabled={busyId === row.id || !picked}>
-                        {busyId === row.id ? (
+          {/* Without this the widened table (department + designation were
+              added to it) pushes the action column clean outside the card. */}
+          <div className="table-scroll">
+            <table className="referral-table">
+              <thead>
+                <tr>
+                  <th>Signed in as</th>
+                  <th>Directory entry</th>
+                  <th>Department &amp; designation</th>
+                  <th>Referral coupon</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((row) => {
+                  const picked = picks[row.id] || ''
+                  const pickedEntry = options.find((option) => option.employee_no === picked)
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        {row.name}
+                        <br />
+                        <small>{row.email}</small>
+                      </td>
+                      <td>
+                        <select
+                          value={picked}
+                          onChange={(event) => setPicks((prev) => ({ ...prev, [row.id]: event.target.value }))}
+                        >
+                          <option value="">Select employee…</option>
+                          {options.map((option) => (
+                            <option key={option.employee_no} value={option.employee_no}>
+                              {option.employee_no} — {option.name}
+                              {option.department ? ` · ${option.department}` : ''}
+                              {option.email ? ` (${option.email})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        {pickedEntry ? (
                           <>
-                            <span className="spinner" /> Linking…
+                            {pickedEntry.department || '—'}
+                            <br />
+                            <small>{pickedEntry.designation || '—'}</small>
                           </>
                         ) : (
-                          <>
-                            <Link2 size={16} /> Link &amp; approve
-                          </>
+                          <span className="muted-cell">—</span>
                         )}
-                      </button>
-                      {errors[row.id] ? (
-                        <p className="availability-msg bad" style={{ marginTop: '0.4rem' }}>
-                          {errors[row.id]}
-                        </p>
-                      ) : null}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td>
+                        {picked ? <b>{buildEmployeeCouponCode(picked)}</b> : <span style={{ color: 'var(--muted)' }}>—</span>}
+                      </td>
+                      <td>
+                        <button className="primary" onClick={() => approve(row.id)} disabled={busyId === row.id || !picked}>
+                          {busyId === row.id ? (
+                            <>
+                              <span className="spinner" /> Linking…
+                            </>
+                          ) : (
+                            <>
+                              <Link2 size={16} /> Link &amp; approve
+                            </>
+                          )}
+                        </button>
+                        {errors[row.id] ? (
+                          <p className="availability-msg bad" style={{ marginTop: '0.4rem' }}>
+                            {errors[row.id]}
+                          </p>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </>
       ) : (
         <div className="empty">

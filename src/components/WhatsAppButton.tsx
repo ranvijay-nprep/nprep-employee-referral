@@ -32,11 +32,14 @@ export default function WhatsAppButton({
   const number = phone ? toWhatsAppNumber(phone) : ''
   const href = `https://wa.me/${number}?text=${encodeURIComponent(text)}`
 
+  // Same WhatsApp green when disabled, just dimmed. Falling back to a plain
+  // `button.primary` here made it turn blue, so the control looked like a
+  // different button entirely rather than the same one waiting for input.
   if (disabled) {
     return (
-      <button className={variant} disabled>
+      <span className={`button-link ${variant} is-disabled`} aria-disabled="true">
         {icon ?? <MessageCircle size={16} />} {label}
-      </button>
+      </span>
     )
   }
 

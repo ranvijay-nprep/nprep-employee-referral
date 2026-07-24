@@ -47,9 +47,17 @@ export function summariseAllShares(purchaseRows: ReferralRow[]): {
   converted: number
   byEmployee: Map<number, { tracked: number; converted: number }>
 } {
-  const successfulPhones = new Set(
-    purchaseRows.filter((row) => row.isSuccessful).map((row) => normalizePhone(row.studentPhone)).filter(Boolean),
-  )
+  // Keyed by employee AND phone, not phone alone. A bare phone set would
+  // credit employee A with a conversion when the person they shared with
+  // actually bought on employee B's coupon - the sale belongs to B, and A's
+  // share genuinely did not convert.
+  const successfulByEmployee = new Set<string>()
+  for (const row of purchaseRows) {
+    if (!row.isSuccessful || row.employeeId == null) continue
+    const phone = normalizePhone(row.studentPhone)
+    if (phone) successfulByEmployee.add(`${row.employeeId}:${phone}`)
+  }
+
   const byEmployee = new Map<number, { tracked: number; converted: number }>()
   let tracked = 0
   let converted = 0
@@ -58,7 +66,7 @@ export function summariseAllShares(purchaseRows: ReferralRow[]): {
     const entry = byEmployee.get(share.employee_id) || { tracked: 0, converted: 0 }
     entry.tracked += 1
     tracked += 1
-    if (successfulPhones.has(share.referee_phone)) {
+    if (successfulByEmployee.has(`${share.employee_id}:${share.referee_phone}`)) {
       entry.converted += 1
       converted += 1
     }
