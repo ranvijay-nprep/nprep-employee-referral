@@ -1,4 +1,5 @@
 import {
+  activateCouponRequest,
   assignEmployeeCodeAndCreateCoupon,
   getCouponRequestByCode,
   getCouponRequestByEmployeeId,
@@ -8,7 +9,7 @@ import {
 } from '@/lib/db'
 import { nprepCouponExists } from '@/lib/nprepDb'
 import { buildEmployeeCouponCode } from '@/lib/couponCode'
-import { sendAdminCouponRequestEmail } from '@/lib/email'
+import { sendAdminCouponRequestEmail, sendEmployeeCouponActiveEmail } from '@/lib/email'
 import type { Employee } from '@/lib/types'
 
 const USAGE_LIMIT = 100
@@ -34,11 +35,19 @@ export async function ensureReferralForLogin(employee: Employee): Promise<void> 
 
     const couponCode = buildEmployeeCouponCode(entry.employee_no)
 
-    // Don't create if this code already exists - locally, or as a real NPrep
-    // coupon (which would be someone else's). If the NPrep check can't run
-    // (e.g. DB down), bail and retry later rather than risk a mis-attribution.
+    // Someone already holds this code in our own table - a genuine conflict
+    // only an admin can untangle. Never take it off them.
     if (getCouponRequestByCode(couponCode)) return
-    if (await nprepCouponExists(couponCode)) return
+
+    // The code is built from *this* person's directory Employee No, so a coupon
+    // already sitting in NPrep under that exact code is theirs by construction -
+    // admins routinely bulk-create the NPrep<no> coupons ahead of first login.
+    // Adopt it as already-active instead of skipping. The old `return` here
+    // stranded every such employee permanently: no code, no coupon row, and so
+    // their referrals were unattributable in the report (see NPrep2038).
+    // If this check can't run (e.g. NPrep DB down) it throws, the outer catch
+    // swallows it, and nothing is created - we retry on the next page hit.
+    const alreadyLiveInNprep = await nprepCouponExists(couponCode)
 
     const activationDate = new Date()
     const expiryDate = new Date(activationDate)
@@ -52,6 +61,20 @@ export async function ensureReferralForLogin(employee: Employee): Promise<void> 
       activationDate: isoDate(activationDate),
       expiryDate: isoDate(expiryDate),
     })
+
+    // Already live in NPrep - there is nothing for an admin to create, so skip
+    // the request email, flip it active immediately and tell the employee their
+    // code is ready. This is also what heals the employees stranded by the old
+    // guard: they pick their code up on their next authenticated page hit.
+    if (alreadyLiveInNprep) {
+      activateCouponRequest(request.id)
+      try {
+        await sendEmployeeCouponActiveEmail(employee.email, couponCode)
+      } catch (emailError) {
+        console.error('auto-assign: employee activation email failed', emailError)
+      }
+      return
+    }
 
     try {
       const adminEmails = listAdmins().map((admin) => admin.email)
