@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import {
+  activateCouponRequest,
   assignEmployeeCodeAndCreateCoupon,
   getCouponRequestByCode,
   getCouponRequestByEmployeeId,
@@ -11,9 +12,9 @@ import {
   listAdmins,
   markCouponAdminNotified,
 } from '@/lib/db'
-import { nprepCouponExists } from '@/lib/nprepDb'
+import { getNprepCoupon } from '@/lib/nprepDb'
 import { buildEmployeeCouponCode } from '@/lib/couponCode'
-import { sendAdminCouponRequestEmail } from '@/lib/email'
+import { sendAdminCouponRequestEmail, sendEmployeeCouponActiveEmail } from '@/lib/email'
 
 const USAGE_LIMIT = 100
 const EXPIRY_MONTHS = 6
@@ -63,13 +64,21 @@ export async function POST(request: NextRequest) {
   }
 
   const couponCode = buildEmployeeCouponCode(entry.employee_no)
-  if (getCouponRequestByCode(couponCode) || (await nprepCouponExists(couponCode))) {
+  // Claimed in our own table = a real conflict the admin has to sort out.
+  if (getCouponRequestByCode(couponCode)) {
     return NextResponse.json({ error: `Coupon "${couponCode}" already exists.` }, { status: 409 })
   }
 
-  const activationDate = new Date()
-  const expiryDate = new Date(activationDate)
-  expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS)
+  // Already in NPrep is NOT a conflict: the code is derived from the directory
+  // entry the admin just picked, so that coupon is this person's - the NPrep<no>
+  // coupons are bulk-created ahead of time. Refusing the link here left people
+  // permanently unlinkable (Radheshyam Jangid / NPrep1092). Adopt it instead,
+  // reusing NPrep's real validity window rather than inventing one.
+  const liveCoupon = await getNprepCoupon(couponCode)
+
+  const fallbackActivation = new Date()
+  const fallbackExpiry = new Date(fallbackActivation)
+  fallbackExpiry.setMonth(fallbackExpiry.getMonth() + EXPIRY_MONTHS)
 
   let result
   try {
@@ -77,13 +86,28 @@ export async function POST(request: NextRequest) {
       employeeId,
       employeeCode: entry.employee_no,
       couponCode,
-      usageLimit: USAGE_LIMIT,
-      activationDate: isoDate(activationDate),
-      expiryDate: isoDate(expiryDate),
+      usageLimit: liveCoupon?.usageLimit ?? USAGE_LIMIT,
+      activationDate: liveCoupon?.activationDate ?? isoDate(fallbackActivation),
+      expiryDate: liveCoupon?.expiryDate ?? isoDate(fallbackExpiry),
     })
   } catch {
     // Unique-constraint race between the checks above and the transaction.
     return NextResponse.json({ error: 'That employee was just linked - please refresh.' }, { status: 409 })
+  }
+
+  // Live in NPrep already - nothing for an admin to create, so flip it active
+  // and tell the employee their code works, instead of raising a request.
+  if (liveCoupon) {
+    activateCouponRequest(result.request.id)
+    try {
+      await sendEmployeeCouponActiveEmail(employee.email, couponCode)
+    } catch (emailError) {
+      console.error('Failed to send employee coupon-active email', emailError)
+    }
+    return NextResponse.json({
+      employee: result.employee,
+      request: getCouponRequestByCode(couponCode) ?? result.request,
+    })
   }
 
   try {

@@ -7,7 +7,7 @@ import {
   listAdmins,
   markCouponAdminNotified,
 } from '@/lib/db'
-import { nprepCouponExists } from '@/lib/nprepDb'
+import { getNprepCoupon } from '@/lib/nprepDb'
 import { buildEmployeeCouponCode } from '@/lib/couponCode'
 import { sendAdminCouponRequestEmail, sendEmployeeCouponActiveEmail } from '@/lib/email'
 import type { Employee } from '@/lib/types'
@@ -47,26 +47,28 @@ export async function ensureReferralForLogin(employee: Employee): Promise<void> 
     // their referrals were unattributable in the report (see NPrep2038).
     // If this check can't run (e.g. NPrep DB down) it throws, the outer catch
     // swallows it, and nothing is created - we retry on the next page hit.
-    const alreadyLiveInNprep = await nprepCouponExists(couponCode)
+    const liveCoupon = await getNprepCoupon(couponCode)
 
-    const activationDate = new Date()
-    const expiryDate = new Date(activationDate)
-    expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS)
+    const fallbackActivation = new Date()
+    const fallbackExpiry = new Date(fallbackActivation)
+    fallbackExpiry.setMonth(fallbackExpiry.getMonth() + EXPIRY_MONTHS)
 
+    // When the coupon is already live, mirror NPrep's real validity window so
+    // the portal never shows an employee a date their coupon doesn't honour.
     const { request } = assignEmployeeCodeAndCreateCoupon({
       employeeId: employee.id,
       employeeCode: entry.employee_no,
       couponCode,
-      usageLimit: USAGE_LIMIT,
-      activationDate: isoDate(activationDate),
-      expiryDate: isoDate(expiryDate),
+      usageLimit: liveCoupon?.usageLimit ?? USAGE_LIMIT,
+      activationDate: liveCoupon?.activationDate ?? isoDate(fallbackActivation),
+      expiryDate: liveCoupon?.expiryDate ?? isoDate(fallbackExpiry),
     })
 
     // Already live in NPrep - there is nothing for an admin to create, so skip
     // the request email, flip it active immediately and tell the employee their
     // code is ready. This is also what heals the employees stranded by the old
     // guard: they pick their code up on their next authenticated page hit.
-    if (alreadyLiveInNprep) {
+    if (liveCoupon) {
       activateCouponRequest(request.id)
       try {
         await sendEmployeeCouponActiveEmail(employee.email, couponCode)
